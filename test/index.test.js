@@ -26,8 +26,8 @@ describe('index test', () => {
 
     beforeEach(() => {
         queueMock = {
-            connect: sinon.stub().callsArgAsync(0),
-            enqueue: sinon.stub().callsArgAsync(3)
+            connect: sinon.stub().yieldsAsync(),
+            enqueue: sinon.stub().yieldsAsync()
         };
         resqueMock = {
             queue: sinon.stub().returns(queueMock)
@@ -41,7 +41,12 @@ describe('index test', () => {
         /* eslint-enable global-require */
 
         executor = new Executor({
-            redisConnection: testConnection
+            redisConnection: testConnection,
+            breaker: {
+                retry: {
+                    retries: 1
+                }
+            }
         });
     });
 
@@ -56,7 +61,15 @@ describe('index test', () => {
 
     describe('construction', () => {
         it('constructs the executor', () => {
-            assert.ok(executor);
+            assert.instanceOf(executor, Executor);
+        });
+
+        it('constructs the executor when no breaker config is passed in', () => {
+            executor = new Executor({
+                redisConnection: testConnection
+            });
+
+            assert.instanceOf(executor, Executor);
         });
 
         it('throws when not given a redis connection', () => {
@@ -78,8 +91,8 @@ describe('index test', () => {
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [testJobConfig]);
         }));
 
-        it('rejects if it can\'t establish a connection', () => {
-            queueMock.connect = sinon.stub().callsArgWithAsync(0, new Error('couldn\'t connect'));
+        it('rejects if it can\'t establish a connection', function () {
+            queueMock.connect.yieldsAsync(new Error('couldn\'t connect'));
 
             return executor.start({
                 annotations: {
@@ -92,7 +105,7 @@ describe('index test', () => {
             }).then(() => {
                 assert.fail('Should not get here');
             }, (err) => {
-                assert.ok(err);
+                assert.instanceOf(err, Error);
             });
         });
     });

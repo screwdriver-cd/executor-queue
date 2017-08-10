@@ -1,26 +1,24 @@
 # Executor Queue
 [![Version][npm-image]][npm-url] ![Downloads][downloads-image] [![Build Status][status-image]][status-url] [![Open Issues][issues-image]][issues-url] [![Dependency Status][daviddm-image]][daviddm-url] ![License][license-image]
 
-> A generic executor plugin that routes builds through a queue
+> An executor plugin that routes builds through a Redis queue
 
-An engine that will trigger a user's compute process to start and stop.
-
-The executor queue for Screwdriver will push new jobs into a redis queue which workers will pop from and handle further with other executors such as [executor-docker](https://github.com/screwdriver-cd/executor-docker) or [executor-k8s-vm](https://github.com/screwdriver-cd/executor-k8s-vm).
+The executor-queue for Screwdriver will push new jobs into a Redis queue. Other executors such as [executor-docker](https://github.com/screwdriver-cd/executor-docker) and [executor-k8s-vm](https://github.com/screwdriver-cd/executor-k8s-vm) will process jobs from this queue.
 
 ## Usage
 
 ```bash
-npm install screwdriver-executor-queue
+$ npm install screwdriver-executor-queue
 ```
 
 ### Interface
 
-It will initialize a connection to [Resque](https://github.com/resque/resque) with the provided connection details.
+It will initialize a connection to [node-resque](https://github.com/taskrabbit/node-resque) with the provided connection details. You can optionally pass in [circuit-fuses](https://github.com/screwdriver-cd/circuit-fuses) breaker options.
 
 Configuration for any executors must be given directly to the [workers](https://github.com/screwdriver-cd/queue-worker) that read from the queue.
 
 **Example executor yaml section:**
-```
+```yaml
 executor:
     plugin: queue
     options:
@@ -34,7 +32,8 @@ executor:
 ## Testing
 
 ```bash
-npm test
+$ npm install
+$ npm test
 ```
 
 ## License

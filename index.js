@@ -2,7 +2,9 @@
 
 const Executor = require('screwdriver-executor-base');
 const Resque = require('node-resque');
-const Breaker = require('circuit-fuses');
+const fuses = require('circuit-fuses');
+const Breaker = fuses.breaker;
+const Fusebox = fuses.box;
 
 class ExecutorQueue extends Executor {
     /**
@@ -10,31 +12,27 @@ class ExecutorQueue extends Executor {
      * @method constructor
      * @param  {Object}         config                      Object with executor and ecosystem
      * @param  {Object}         config.redisConnection      Connection details for redis
+     * @param  {Object}         [config.breaker]            optional breaker config
      */
     constructor(config = {}) {
         if (!config.redisConnection) {
             throw new Error('No redis connection passed in');
         }
 
+        const breaker = Object.assign({}, config.breaker || {});
+
         super();
 
-        const redisConnection = Object.assign(config.redisConnection, { pkg: 'ioredis' });
+        const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
 
         // eslint-disable-next-line new-cap
         this.queue = new Resque.queue({ connection: redisConnection });
+        this.connectBreaker = new Breaker((...args) => this.queue.connect(...args), breaker);
+        this.enqueueBreaker = new Breaker((...args) => this.queue.enqueue(...args), breaker);
 
-        // Note: arguments to enqueue are [queue name, job type, array of args]
-        this.breaker = new Breaker(buildConfig => this.queue.connect((err) => {
-            if (err) {
-                throw err;
-            }
-
-            return this.queue.enqueue('builds', 'start', [buildConfig], (enqueueError) => {
-                if (enqueueError) {
-                    throw enqueueError;
-                }
-            });
-        }));
+        this.fusebox = new Fusebox();
+        this.fusebox.addFuse(this.connectBreaker);
+        this.fusebox.addFuse(this.enqueueBreaker);
     }
 
     /**
@@ -49,7 +47,9 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     _start(config) {
-        return this.breaker.runCommand(config);
+        return this.connectBreaker.runCommand()
+            // Note: arguments to enqueue are [queue name, job type, array of args]
+            .then(() => this.enqueueBreaker.runCommand('builds', 'start', [config]));
     }
 
     /**
@@ -58,7 +58,7 @@ class ExecutorQueue extends Executor {
      * @param {Response} Object     Object containing stats for the executor
      */
     stats() {
-        return this.breaker.stats();
+        return this.enqueueBreaker.stats();
     }
 }
 
