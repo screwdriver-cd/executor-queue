@@ -1,5 +1,4 @@
 {
-  "pkg": "ioredis",
   "host": "127.0.0.1",
   "password": "hunter2",
   "port": 6379,

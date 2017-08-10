@@ -27,7 +27,7 @@ describe('index test', () => {
     beforeEach(() => {
         queueMock = {
             connect: sinon.stub().callsArgAsync(0),
-            enqueue: sinon.stub().yieldsAsync()
+            enqueue: sinon.stub().callsArgAsync(3)
         };
         resqueMock = {
             queue: sinon.stub().returns(queueMock)
@@ -62,11 +62,6 @@ describe('index test', () => {
         it('throws when not given a redis connection', () => {
             assert.throws(() => new Executor(), 'No redis connection passed in');
         });
-
-        it('sets up a redis connection', () => {
-            assert.calledWith(resqueMock.queue, { connection: testConnection });
-            assert.calledOnce(queueMock.connect);
-        });
     });
 
     describe('_start', () => {
@@ -79,30 +74,12 @@ describe('index test', () => {
             apiUri: 'http://api.com',
             token: 'asdf'
         }).then(() => {
+            assert.calledOnce(queueMock.connect);
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [testJobConfig]);
         }));
 
-        it('waits to connect if there is no redis connection', () => {
-            executor.connected = false;
-            queueMock.connect.resetHistory();
-
-            return executor.start({
-                annotations: {
-                    'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
-                },
-                buildId: 8609,
-                container: 'node:4',
-                apiUri: 'http://api.com',
-                token: 'asdf'
-            }).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.enqueue, 'builds', 'start', [testJobConfig]);
-            });
-        });
-
         it('rejects if it can\'t establish a connection', () => {
-            executor.connected = false;
-            queueMock.connect = sinon.stub().callsArgWith(0, 'couldn\'t connect');
+            queueMock.connect = sinon.stub().callsArgWithAsync(0, new Error('couldn\'t connect'));
 
             return executor.start({
                 annotations: {
@@ -114,8 +91,8 @@ describe('index test', () => {
                 token: 'asdf'
             }).then(() => {
                 assert.fail('Should not get here');
-            }, (error) => {
-                assert.ok(error);
+            }, (err) => {
+                assert.ok(err);
             });
         });
     });

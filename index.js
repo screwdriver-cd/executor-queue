@@ -18,38 +18,23 @@ class ExecutorQueue extends Executor {
 
         super();
 
+        const redisConnection = Object.assign(config.redisConnection, { pkg: 'ioredis' });
+
         // eslint-disable-next-line new-cap
-        this.queue = new Resque.queue({ connection: config.redisConnection });
+        this.queue = new Resque.queue({ connection: redisConnection });
 
-        this.connected = false;
-        this.queue.connect(() => {
-            this.connected = true;
-        });
-
-        this.breaker = new Breaker(this.queue.enqueue);
-    }
-
-    /**
-     * Verify that the redis connection is active
-     * @method veryifyConnection
-     * @return {Promise}
-     */
-    verifyConnection() {
-        return new Promise((resolve, reject) => {
-            if (this.connected) {
-                return resolve();
+        // Note: arguments to enqueue are [queue name, job type, array of args]
+        this.breaker = new Breaker(buildConfig => this.queue.connect((err) => {
+            if (err) {
+                throw err;
             }
 
-            return this.queue.connect((err) => {
-                if (err) {
-                    return reject(err);
+            return this.queue.enqueue('builds', 'start', [buildConfig], (enqueueError) => {
+                if (enqueueError) {
+                    throw enqueueError;
                 }
-
-                this.connected = true;
-
-                return resolve();
             });
-        });
+        }));
     }
 
     /**
@@ -64,9 +49,7 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     _start(config) {
-        // Note: arguments to enqueue are [queue name, job type, array of args]
-        return this.verifyConnection()
-            .then(() => this.breaker.runCommand('builds', 'start', [config]));
+        return this.breaker.runCommand(config);
     }
 
     /**

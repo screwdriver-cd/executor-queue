@@ -15,28 +15,20 @@ npm install screwdriver-executor-queue
 
 ### Interface
 
-It will initialize any routers specified in the [default.yaml](https://github.com/screwdriver-cd/screwdriver/blob/master/config/default.yaml#L89-L119) under the `executor` keyword. To specify a default executor plugin, indicate it at the `plugin` keyword. If no default is specified, the first executor defined will be the default.
+It will initialize a connection to [Resque](https://github.com/resque/resque) with the provided connection details.
+
+Configuration for any executors must be given directly to the [workers](https://github.com/screwdriver-cd/queue-worker) that read from the queue.
 
 **Example executor yaml section:**
 ```
 executor:
-    plugin: k8s
-    k8s:
-      options:
-        kubernetes:
-            host: kubernetes.default
-            token: sometokenhere
-        launchVersion: stable
-    docker:
-      options:
-        docker: {}
-        launchVersion: stable
-    k8s-vm:
-      options:
-        kubernetes:
-            host: kubernetes.default
-            token: sometokenhere
-        launchVersion: stable
+    plugin: queue
+    options:
+        redisConnection:
+            host: "127.0.0.1"
+            port: 9999
+            password: "hunter2"
+            database: 0
 ```
 
 ## Testing
