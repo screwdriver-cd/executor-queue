@@ -18,7 +18,9 @@ describe('index test', () => {
     let Executor;
     let executor;
     let resqueMock;
+    let scheduleMock;
     let queueMock;
+    let schedulerMock;
     let redisMock;
     let redisConstructorMock;
 
@@ -38,8 +40,16 @@ describe('index test', () => {
                 connected: false
             }
         };
+        schedulerMock = {
+            connect: sinon.stub().yieldsAsync(),
+            start: sinon.stub().yieldsAsync()
+        };
         resqueMock = {
-            queue: sinon.stub().returns(queueMock)
+            queue: sinon.stub().returns(queueMock),
+            scheduler: sinon.stub().returns(schedulerMock)
+        };
+        scheduleMock = {
+            scheduleJob: sinon.stub().yieldsAsync()
         };
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
@@ -48,6 +58,7 @@ describe('index test', () => {
         redisConstructorMock = sinon.stub().returns(redisMock);
 
         mockery.registerMock('node-resque', resqueMock);
+        mockery.registerMock('node-schedule', scheduleMock);
         mockery.registerMock('ioredis', redisConstructorMock);
 
         /* eslint-disable global-require */
