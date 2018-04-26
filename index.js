@@ -56,33 +56,44 @@ class ExecutorQueue extends Executor {
     }
 
     /**
-     * Starts new periodic builds in an executor
-     * @method _periodicStart
+     * Starts a new periodic build in an executor
+     * @method _startPeriodic
      * @param {Object} config               Configuration
      * @param {Object} config.pipeline      Pipeline of the job
      * @param {Object} config.job           Job object to create periodic builds for
      * @param {Object} config.tokenGen      Function to generate JWT from username, scope and scmContext
+     * @param {Boolean}config.update        Boolean to determine if updating existing periodic build
      * @return {Promise}
      */
-    async _periodicStart(config) {
+    async _startPeriodic(config) {
+        await this.connect();
+
         const pipeline = config.pipeline;
         const job = config.job;
         const tokenGen = config.tokenGen;
+        const update = config.update || false;
+        const buildCron = job.annotations.buildPeriodically;
 
         await this.scheduler.connect();
 
         return this.scheduler.start()
             .then(() => {
-                const scheduledJob = schedule.scheduleJob(job.annotations.buildPeriodically, async () => {
+                if (update) {
+                    return this.redisBreaker.runCommand('hget', this.periodicBuildTable, job.id)
+                        .then((scheduledJob) => {
+                            scheduledJob.reschedule(buildCron);
+
+                            return this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                                job.id, scheduledJob);
+                        });
+                }
+
+                const scheduledJob = schedule.scheduleJob(buildCron, async () => {
                     // we want to ensure that only one instance of this job is scheduled in our environment at once,
                     // no matter how many schedulers we have running
                     if (this.scheduler.master) {
                         pipeline.admin((user) => {
-                            const jwt = tokenGen(user, {
-                                isPR: job.isPR(),
-                                jobId: job.id,
-                                pipelineId: pipeline.id
-                            }, pipeline.scmContext);
+                            const jwt = tokenGen(user, {}, pipeline.scmContext);
 
                             const options = {
                                 url: '/events',
@@ -108,9 +119,23 @@ class ExecutorQueue extends Executor {
                     }
                 });
 
-                await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
-                        job.id, scheduledJob);
+                return this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                    job.id, scheduledJob);
             });
+    }
+
+    /**
+     * Stops a previously scheduled periodic build in an executor
+     * @async  _stopPeriodic
+     * @param  {Object}  config        Configuration
+     * @param  {Integer} config.jobId  ID of the job with periodic builds
+     * @return {Promise}
+     */
+    async _stopPeriodic(config) {
+        await this.connect();
+
+        return this.redisBreaker.runCommand('hget', this.periodicBuildTable, config.jobId)
+            .then(scheduledJob => scheduledJob.cancel());
     }
 
     /**

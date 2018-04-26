@@ -8,9 +8,12 @@ const mockery = require('mockery');
 const sinon = require('sinon');
 const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
+const testPipeline = require('./data/testPipeline.json');
+const testJob = require('./data/testJob.json');
 const partialTestConfig = {
     buildId: testConfig.buildId
 };
+const tokenGen = sinon.stub.returns('123456abc');
 
 sinon.assert.expose(chai.assert, { prefix: '' });
 
@@ -19,6 +22,7 @@ describe('index test', () => {
     let executor;
     let resqueMock;
     let scheduleMock;
+    let nodeScheduleMock;
     let queueMock;
     let schedulerMock;
     let redisMock;
@@ -46,11 +50,12 @@ describe('index test', () => {
         };
         resqueMock = {
             queue: sinon.stub().returns(queueMock),
-            scheduler: sinon.stub().returns(schedulerMock)
+            Scheduler: sinon.stub().returns(schedulerMock)
         };
         scheduleMock = {
             scheduleJob: sinon.stub().yieldsAsync()
         };
+        nodeScheduleMock = sinon.stub().returns(scheduleMock);
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
             hset: sinon.stub().yieldsAsync()
@@ -58,7 +63,7 @@ describe('index test', () => {
         redisConstructorMock = sinon.stub().returns(redisMock);
 
         mockery.registerMock('node-resque', resqueMock);
-        mockery.registerMock('node-schedule', scheduleMock);
+        mockery.registerMock('node-schedule', nodeScheduleMock);
         mockery.registerMock('ioredis', redisConstructorMock);
 
         /* eslint-disable global-require */
@@ -111,6 +116,50 @@ describe('index test', () => {
 
         it('throws when not given a redis connection', () => {
             assert.throws(() => new Executor(), 'No redis connection passed in');
+        });
+    });
+
+    describe('_startPeriodic', () => {
+        it('rejects if it can\'t establish a connection', function () {
+            queueMock.connect.yieldsAsync(new Error('couldn\'t connect'));
+
+            return executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.fail('Should not get here');
+            }, (err) => {
+                assert.instanceOf(err, Error);
+            });
+        });
+
+        /* it('enqueues a build and caches the config', () => executor.periodicStart({
+            annotations: {
+                'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
+            },
+            buildId: 8609,
+            container: 'node:4',
+            apiUri: 'http://api.com',
+            token: 'asdf'
+        }).then(() => {
+            assert.calledOnce(queueMock.connect);
+            assert.calledWith(redisMock.hset, 'buildConfigs', testConfig.buildId,
+                JSON.stringify(testConfig));
+            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
+        })); */
+
+        it('doesn\'t call connect if there\'s already a connection', () => {
+            queueMock.connection.connected = true;
+
+            return executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.notCalled(queueMock.connect);
+                assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
+            });
         });
     });
 
