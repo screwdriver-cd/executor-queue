@@ -58,23 +58,17 @@ class ExecutorQueue extends Executor {
     /**
      * Starts a new periodic build in an executor
      * @method _startPeriodic
-     * @param {Object} config               Configuration
-     * @param {Object} config.pipeline      Pipeline of the job
-     * @param {Object} config.job           Job object to create periodic builds for
-     * @param {Object} config.tokenGen      Function to generate JWT from username, scope and scmContext
-     * @param {Boolean}config.update        Boolean to determine if updating existing periodic build
+     * @param {Object}   config             Configuration
+     * @param {Object}   config.pipeline    Pipeline of the job
+     * @param {Object}   config.job         Job object to create periodic builds for
+     * @param {Function} config.tokenGen    Function to generate JWT from username, scope and scmContext
+     * @param {Boolean}  config.isUpdate    Boolean to determine if updating existing periodic build
      * @return {Promise}
      */
-    async _startPeriodic(config) {
+    async _startPeriodic({ pipeline, job, tokenGen, update = false }) {
+        const buildCron = job.permutations[0].annotations.buildPeriodically;
+
         await this.connect();
-
-        const pipeline = config.pipeline;
-        const job = config.job;
-        const tokenGen = config.tokenGen;
-        const update = config.update || false;
-        const buildCron = job.annotations.buildPeriodically;
-
-        await this.scheduler.connect();
 
         return this.scheduler.start()
             .then(() => {
