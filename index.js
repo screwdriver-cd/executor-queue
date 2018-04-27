@@ -3,7 +3,9 @@
 const Executor = require('screwdriver-executor-base');
 const Redis = require('ioredis');
 const Resque = require('node-resque');
+const schedule = require('node-schedule');
 const fuses = require('circuit-fuses');
+const req = require('request');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -28,6 +30,7 @@ class ExecutorQueue extends Executor {
         this.prefix = config.prefix || '';
         this.buildQueue = `${this.prefix}builds`;
         this.buildConfigTable = `${this.prefix}buildConfigs`;
+        this.periodicBuildTable = `${this.prefix}periodicBuilds`;
 
         const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
 
@@ -48,6 +51,86 @@ class ExecutorQueue extends Executor {
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
+
+        this.scheduler = new Resque.Scheduler({ connection: redisConnection });
+    }
+
+    /**
+     * Starts a new periodic build in an executor
+     * @method _startPeriodic
+     * @param {Object}   config             Configuration
+     * @param {Object}   config.pipeline    Pipeline of the job
+     * @param {Object}   config.job         Job object to create periodic builds for
+     * @param {Function} config.tokenGen    Function to generate JWT from username, scope and scmContext
+     * @param {Boolean}  config.isUpdate    Boolean to determine if updating existing periodic build
+     * @return {Promise}
+     */
+    async _startPeriodic({ pipeline, job, tokenGen, isUpdate = false }) {
+        const buildCron = job.permutations[0].annotations.buildPeriodically;
+
+        await this.connect();
+
+        return this.scheduler.start()
+            .then(() => {
+                if (isUpdate) {
+                    return this.redisBreaker.runCommand('hget', this.periodicBuildTable, job.id)
+                        .then(JSON.parse)
+                        .then((scheduledJob) => {
+                            scheduledJob.reschedule(buildCron);
+
+                            return this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                                job.id, scheduledJob);
+                        });
+                }
+
+                const scheduledJob = schedule.scheduleJob(buildCron, async () => {
+                    // we want to ensure that only one instance of this job is scheduled in our environment at once,
+                    // no matter how many schedulers we have running
+                    if (this.scheduler.master) {
+                        pipeline.admin((user) => {
+                            const jwt = tokenGen(user, {}, pipeline.scmContext);
+
+                            const options = {
+                                url: '/events',
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${jwt}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: {
+                                    pipelineId: pipeline.id,
+                                    startFrom: job.name
+                                }
+                            };
+
+                            req(options, (err, response) => {
+                                if (err) {
+                                    return Promise.reject(err);
+                                }
+
+                                return Promise.resolve(response);
+                            });
+                        });
+                    }
+                });
+
+                return this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                    job.id, scheduledJob);
+            });
+    }
+
+    /**
+     * Stops a previously scheduled periodic build in an executor
+     * @async  _stopPeriodic
+     * @param  {Object}  config        Configuration
+     * @param  {Integer} config.jobId  ID of the job with periodic builds
+     * @return {Promise}
+     */
+    async _stopPeriodic(config) {
+        await this.connect();
+
+        return this.redisBreaker.runCommand('hget', this.periodicBuildTable, config.jobId)
+            .then(scheduledJob => scheduledJob.cancel());
     }
 
     /**

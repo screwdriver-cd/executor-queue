@@ -8,9 +8,12 @@ const mockery = require('mockery');
 const sinon = require('sinon');
 const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
+const testPipeline = require('./data/testPipeline.json');
+const testJob = require('./data/testJob.json');
 const partialTestConfig = {
     buildId: testConfig.buildId
 };
+const tokenGen = sinon.stub.returns('123456abc');
 
 sinon.assert.expose(chai.assert, { prefix: '' });
 
@@ -18,7 +21,9 @@ describe('index test', () => {
     let Executor;
     let executor;
     let resqueMock;
+    let scheduleMock;
     let queueMock;
+    let schedulerMock;
     let redisMock;
     let redisConstructorMock;
 
@@ -38,16 +43,25 @@ describe('index test', () => {
                 connected: false
             }
         };
+        schedulerMock = {
+            start: sinon.stub().resolves()
+        };
         resqueMock = {
-            queue: sinon.stub().returns(queueMock)
+            queue: sinon.stub().returns(queueMock),
+            Scheduler: sinon.stub().returns(schedulerMock)
+        };
+        scheduleMock = {
+            scheduleJob: sinon.stub().yieldsAsync()
         };
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
-            hset: sinon.stub().yieldsAsync()
+            hset: sinon.stub().yieldsAsync(),
+            hget: sinon.stub().yieldsAsync(null, '{}')
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
 
         mockery.registerMock('node-resque', resqueMock);
+        mockery.registerMock('node-schedule', scheduleMock);
         mockery.registerMock('ioredis', redisConstructorMock);
 
         /* eslint-disable global-require */
@@ -101,6 +115,57 @@ describe('index test', () => {
         it('throws when not given a redis connection', () => {
             assert.throws(() => new Executor(), 'No redis connection passed in');
         });
+    });
+
+    describe('_startPeriodic', () => {
+        it('rejects if it can\'t establish a connection', function () {
+            queueMock.connect.yieldsAsync(new Error('couldn\'t connect'));
+
+            return executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.fail('Should not get here');
+            }, (err) => {
+                assert.instanceOf(err, Error);
+            });
+        });
+
+        it('doesn\'t call connect if there\'s already a connection', () => {
+            queueMock.connection.connected = true;
+
+            return executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.notCalled(queueMock.connect);
+            });
+        });
+
+        it('schedules a new job if isUpdate flag is not passed', () =>
+            executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.calledWith(scheduleMock.scheduleJob, '* * * * * *');
+            })
+        );
+
+        it('reschedules an existing job if isUpdate flag is passed', () =>
+            executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen,
+                isUpdate: true
+            }).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.notCalled(scheduleMock.scheduleJob);
+            })
+        );
     });
 
     describe('_start', () => {
