@@ -65,15 +65,16 @@ class ExecutorQueue extends Executor {
      * @param {Boolean}  config.isUpdate    Boolean to determine if updating existing periodic build
      * @return {Promise}
      */
-    async _startPeriodic({ pipeline, job, tokenGen, update = false }) {
+    async _startPeriodic({ pipeline, job, tokenGen, isUpdate = false }) {
         const buildCron = job.permutations[0].annotations.buildPeriodically;
 
         await this.connect();
 
         return this.scheduler.start()
             .then(() => {
-                if (update) {
+                if (isUpdate) {
                     return this.redisBreaker.runCommand('hget', this.periodicBuildTable, job.id)
+                        .then(JSON.parse)
                         .then((scheduledJob) => {
                             scheduledJob.reschedule(buildCron);
 

@@ -22,7 +22,6 @@ describe('index test', () => {
     let executor;
     let resqueMock;
     let scheduleMock;
-    let nodeScheduleMock;
     let queueMock;
     let schedulerMock;
     let redisMock;
@@ -45,8 +44,7 @@ describe('index test', () => {
             }
         };
         schedulerMock = {
-            connect: sinon.stub().yieldsAsync(),
-            start: sinon.stub().yieldsAsync()
+            start: sinon.stub().resolves()
         };
         resqueMock = {
             queue: sinon.stub().returns(queueMock),
@@ -55,15 +53,15 @@ describe('index test', () => {
         scheduleMock = {
             scheduleJob: sinon.stub().yieldsAsync()
         };
-        nodeScheduleMock = sinon.stub().returns(scheduleMock);
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
-            hset: sinon.stub().yieldsAsync()
+            hset: sinon.stub().yieldsAsync(),
+            hget: sinon.stub().yieldsAsync(null, '{}')
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
 
         mockery.registerMock('node-resque', resqueMock);
-        mockery.registerMock('node-schedule', nodeScheduleMock);
+        mockery.registerMock('node-schedule', scheduleMock);
         mockery.registerMock('ioredis', redisConstructorMock);
 
         /* eslint-disable global-require */
@@ -134,21 +132,6 @@ describe('index test', () => {
             });
         });
 
-        /* it('enqueues a build and caches the config', () => executor.periodicStart({
-            annotations: {
-                'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
-            },
-            buildId: 8609,
-            container: 'node:4',
-            apiUri: 'http://api.com',
-            token: 'asdf'
-        }).then(() => {
-            assert.calledOnce(queueMock.connect);
-            assert.calledWith(redisMock.hset, 'buildConfigs', testConfig.buildId,
-                JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
-        })); */
-
         it('doesn\'t call connect if there\'s already a connection', () => {
             queueMock.connection.connected = true;
 
@@ -158,9 +141,31 @@ describe('index test', () => {
                 tokenGen
             }).then(() => {
                 assert.notCalled(queueMock.connect);
-                assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
             });
         });
+
+        it('schedules a new job if isUpdate flag is not passed', () =>
+            executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen
+            }).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.calledWith(scheduleMock.scheduleJob, '* * * * * *');
+            })
+        );
+
+        it('reschedules an existing job if isUpdate flag is passed', () =>
+            executor._startPeriodic({
+                pipeline: testPipeline,
+                job: testJob,
+                tokenGen,
+                isUpdate: true
+            }).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.notCalled(scheduleMock.scheduleJob);
+            })
+        );
     });
 
     describe('_start', () => {
