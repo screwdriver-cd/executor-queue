@@ -5,7 +5,7 @@ const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const req = require('request');
-const cron = require('./lib/cron.js');
+const cron = require('./lib/transformCron.js');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -62,33 +62,28 @@ class ExecutorQueue extends Executor {
      * @param {Object} config.job      Job object to create periodic builds for
      * @return {Promise}
      */
-    async postBuildEvent(config) {
-        const pipeline = config.pipeline;
-        const job = config.job;
+    async postBuildEvent({ pipeline, job }) {
+        const jwt = this.tokenGen(pipeline.admins[0], {}, pipeline.scmContext);
 
-        return pipeline.admin((user) => {
-            const jwt = this.tokenGen(user, {}, pipeline.scmContext);
+        const options = {
+            url: '/events',
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${jwt}`,
+                'Content-Type': 'application/json'
+            },
+            body: {
+                pipelineId: pipeline.id,
+                startFrom: job.name
+            }
+        };
 
-            const options = {
-                url: '/events',
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${jwt}`,
-                    'Content-Type': 'application/json'
-                },
-                body: {
-                    pipelineId: pipeline.id,
-                    startFrom: job.name
-                }
-            };
+        return req(options, (err, response) => {
+            if (err) {
+                return Promise.reject(err);
+            }
 
-            return req(options, (err, response) => {
-                if (err) {
-                    return Promise.reject(err);
-                }
-
-                return Promise.resolve(response);
-            });
+            return Promise.resolve(response);
         });
     }
 
@@ -103,6 +98,7 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startPeriodic(config, triggerBuild = false) {
+        // Save tokenGen to current executor object so we can access it in postBuildEvent
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
         }
@@ -119,7 +115,10 @@ class ExecutorQueue extends Executor {
         }
 
         await this.connect();
-        const next = cron.nextExecution(config.job.permutations[0].annotations.buildPeriodically);
+
+        // eslint-disable-next-line max-len
+        const next = cron(config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'],
+            config.job.id);
 
         // Store the config in redis
         await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
