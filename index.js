@@ -4,6 +4,8 @@ const Executor = require('screwdriver-executor-base');
 const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
+const schedule = require('node-schedule');
+const req = require('request');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -28,6 +30,8 @@ class ExecutorQueue extends Executor {
         this.prefix = config.prefix || '';
         this.buildQueue = `${this.prefix}builds`;
         this.buildConfigTable = `${this.prefix}buildConfigs`;
+        this.periodicBuildTable = `${this.prefix}periodicBuilds`;
+        this.tokenGen = null;
 
         const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
 
@@ -48,6 +52,94 @@ class ExecutorQueue extends Executor {
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
+
+        this.scheduler = new Resque.Scheduler({ connection: redisConnection });
+    }
+
+    /**
+     * Posts a new build event to the API
+     * @method postBuildEvent
+     * @param {Object} config          Configuration
+     * @param {Object} config.pipeline Pipeline of the job
+     * @param {Object} config.job      Job object to create periodic builds for
+     * @return {Promise}
+     */
+    async postBuildEvent(config) {
+        const pipeline = config.pipeline;
+        const job = config.job;
+        const buildCron = config.job.permutations[0].annotations.buildPeriodically;
+
+        return pipeline.admin((user) => {
+            const jwt = this.tokenGen(user, {}, pipeline.scmContext);
+
+            const options = {
+                url: '/events',
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${jwt}`,
+                    'Content-Type': 'application/json'
+                },
+                body: {
+                    pipelineId: pipeline.id,
+                    startFrom: job.name
+                }
+            };
+
+            return req(options, (err, response) => {
+                if (err) {
+                    return Promise.reject(err);
+                }
+
+                return Promise.resolve(response);
+            });
+        });
+    }
+
+    /**
+     * Starts a new periodic build in an executor
+     * @method _startPeriodic
+     * @param {Object}   config             Configuration
+     * @param {Object}   config.pipeline    Pipeline of the job
+     * @param {Object}   config.job         Job object to create periodic builds for
+     * @param {Function} config.tokenGen    Function to generate JWT from username, scope and scmContext
+     * @param {Boolean}  config.isUpdate    Boolean to determine if updating existing periodic build
+     * @return {Promise}
+     */
+    async _startPeriodic(config, triggerBuild = false) {
+        if (!this.tokenGen) {
+            this.tokenGen = config.tokenGen;
+        }
+
+        if (triggerBuild) {
+            await this.postBuildEvent(config);
+        }
+
+        await this.connect();
+        config.cron = this.cronTransform(config.job.permutations[0].annotations.buildPeriodically);
+        config.next = this.nextExecution(config.cron);
+
+        // Store the config in redis
+        await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+            config.job.id, JSON.stringify(config));
+
+        // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
+        await this.queueBreaker.runCommand('enqueueAt', config.next,
+            this.buildQueue, 'startDelayed', [{
+                jobId: config.job.id
+            }]);
+    }
+
+    /**
+     * Stops a previously scheduled periodic build in an executor
+     * @async  _stopPeriodic
+     * @param  {Object}  config        Configuration
+     * @param  {Integer} config.jobId  ID of the job with periodic builds
+     * @return {Promise}
+     */
+    async _stopPeriodic(config) {
+        await this.connect();
+
+        return this.redisBreaker.runCommand('hdel', this.periodicBuildTable, job.id);
     }
 
     /**
