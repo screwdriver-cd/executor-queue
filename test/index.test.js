@@ -8,8 +8,16 @@ const mockery = require('mockery');
 const sinon = require('sinon');
 const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
+const testPipeline = require('./data/testPipeline.json');
+const testJob = require('./data/testJob.json');
 const partialTestConfig = {
     buildId: testConfig.buildId
+};
+const tokenGen = sinon.stub.returns('123456abc');
+const testDelayedConfig = {
+    pipeline: testPipeline,
+    job: testJob,
+    tokenGen
 };
 
 sinon.assert.expose(chai.assert, { prefix: '' });
@@ -21,6 +29,7 @@ describe('index test', () => {
     let queueMock;
     let redisMock;
     let redisConstructorMock;
+    let cronMock;
 
     before(() => {
         mockery.enable({
@@ -33,6 +42,7 @@ describe('index test', () => {
         queueMock = {
             connect: sinon.stub().yieldsAsync(),
             enqueue: sinon.stub().yieldsAsync(),
+            enqueueAt: sinon.stub().yieldsAsync(),
             del: sinon.stub().yieldsAsync(null, 1),
             connection: {
                 connected: false
@@ -46,9 +56,13 @@ describe('index test', () => {
             hset: sinon.stub().yieldsAsync()
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
+        cronMock = {
+            nextExecution: sinon.stub()
+        };
 
         mockery.registerMock('node-resque', resqueMock);
         mockery.registerMock('ioredis', redisConstructorMock);
+        mockery.registerMock('./lib/cron', cronMock);
 
         /* eslint-disable global-require */
         Executor = require('../index');
@@ -100,6 +114,55 @@ describe('index test', () => {
 
         it('throws when not given a redis connection', () => {
             assert.throws(() => new Executor(), 'No redis connection passed in');
+        });
+    });
+
+    describe('_startPeriodic', () => {
+        it('rejects if it can\'t establish a connection', function () {
+            queueMock.connect.yieldsAsync(new Error('couldn\'t connect'));
+
+            return executor._startPeriodic(testDelayedConfig).then(() => {
+                assert.fail('Should not get here');
+            }, (err) => {
+                assert.instanceOf(err, Error);
+            });
+        });
+
+        it('doesn\'t call connect if there\'s already a connection', () => {
+            queueMock.connection.connected = true;
+
+            return executor._startPeriodic(testDelayedConfig).then(() => {
+                assert.notCalled(queueMock.connect);
+            });
+        });
+
+        it('enqueues a new delayed job in the queue', () => {
+            cronMock.nextExecution.returns(1);
+            executor._startPeriodic(testDelayedConfig).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'periodicBuilds', testJob.id,
+                    JSON.stringify(testDelayedConfig));
+                assert.calledWith(cronMock.nextExecution, '* * * * * *');
+                assert.calledWith(queueMock.enqueueAt, 1, 'builds', 'startDelayed', [{
+                    jobId: testJob.id
+                }]);
+            });
+        });
+
+        it('stops and reEnqueues an existing job if isUpdate flag is passed', () => {
+            testDelayedConfig.isUpdate = true;
+            executor._startPeriodic(testDelayedConfig).then(() => {
+                assert.calledTwice(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'periodicBuilds', testJob.id,
+                    JSON.stringify(testDelayedConfig));
+                assert.calledWith(queueMock.enqueueAt, 1, 'builds', 'startDelayed', [{
+                    jobId: testJob.id
+                }]);
+                assert.calledWith(queueMock.del, 'builds', 'startDelayed', [{
+                    jobId: testJob.id
+                }]);
+                assert.calledWith(redisMock.hdel, 'periodicBuilds', testJob.id);
+            });
         });
     });
 

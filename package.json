@@ -44,7 +44,8 @@
     "circuit-fuses": "^3.0.0",
     "ioredis": "^3.1.2",
     "node-resque": "^4.0.7",
-    "screwdriver-executor-base": "^5.2.2"
+    "screwdriver-executor-base": "^5.2.2",
+    "request": "^2.85.0"
   },
   "release": {
     "debug": false,

@@ -4,8 +4,8 @@ const Executor = require('screwdriver-executor-base');
 const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
-const schedule = require('node-schedule');
 const req = require('request');
+const cron = require('./lib/cron.js');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -52,8 +52,6 @@ class ExecutorQueue extends Executor {
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
-
-        this.scheduler = new Resque.Scheduler({ connection: redisConnection });
     }
 
     /**
@@ -67,7 +65,6 @@ class ExecutorQueue extends Executor {
     async postBuildEvent(config) {
         const pipeline = config.pipeline;
         const job = config.job;
-        const buildCron = config.job.permutations[0].annotations.buildPeriodically;
 
         return pipeline.admin((user) => {
             const jwt = this.tokenGen(user, {}, pipeline.scmContext);
@@ -110,20 +107,26 @@ class ExecutorQueue extends Executor {
             this.tokenGen = config.tokenGen;
         }
 
+        if (config.isUpdate) {
+            // eslint-disable-next-line no-underscore-dangle
+            await this._stopPeriodic({
+                jobId: config
+            });
+        }
+
         if (triggerBuild) {
             await this.postBuildEvent(config);
         }
 
         await this.connect();
-        config.cron = this.cronTransform(config.job.permutations[0].annotations.buildPeriodically);
-        config.next = this.nextExecution(config.cron);
+        const next = cron.nextExecution(config.job.permutations[0].annotations.buildPeriodically);
 
         // Store the config in redis
         await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
             config.job.id, JSON.stringify(config));
 
         // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-        await this.queueBreaker.runCommand('enqueueAt', config.next,
+        await this.queueBreaker.runCommand('enqueueAt', next,
             this.buildQueue, 'startDelayed', [{
                 jobId: config.job.id
             }]);
@@ -139,7 +142,11 @@ class ExecutorQueue extends Executor {
     async _stopPeriodic(config) {
         await this.connect();
 
-        return this.redisBreaker.runCommand('hdel', this.periodicBuildTable, job.id);
+        await this.queueBreaker.runCommand('del', this.buildQueue, 'startDelayed', [{
+            jobId: config.jobId
+        }]);
+
+        return this.redisBreaker.runCommand('hdel', this.periodicBuildTable, config.jobId);
     }
 
     /**
