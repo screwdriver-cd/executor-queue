@@ -5,6 +5,8 @@ const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const req = require('request');
+const hoek = require('hoek');
+const winston = require('winston');
 const cron = require('./lib/cron');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
@@ -29,8 +31,9 @@ class ExecutorQueue extends Executor {
 
         this.prefix = config.prefix || '';
         this.buildQueue = `${this.prefix}builds`;
+        this.periodicBuildQueue = `${this.prefix}periodicBuilds`;
         this.buildConfigTable = `${this.prefix}buildConfigs`;
-        this.periodicBuildTable = `${this.prefix}periodicBuilds`;
+        this.periodicBuildTable = `${this.prefix}periodicBuildConfigs`;
         this.tokenGen = null;
 
         const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
@@ -52,6 +55,106 @@ class ExecutorQueue extends Executor {
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
+
+        const RETRY_LIMIT = 3;
+        const RETRY_DELAY = 5;
+        const retryOptions = {
+            plugins: ['retry'],
+            pluginOptions: {
+                retry: {
+                    retryLimit: RETRY_LIMIT,
+                    retryDelay: RETRY_DELAY
+                }
+            }
+        };
+        // Jobs object to register the worker with
+        const jobs = {
+            startDelayed: Object.assign({ perform: (jobConfig, callback) =>
+                this.redisBreaker.runCommand('hget', this.periodicBuildTable,
+                    jobConfig.jobId)
+                    .then(fullConfig => this.startPeriodic(Object.assign(JSON.parse(fullConfig)),
+                        { triggerBuild: true }))
+                    .then(result => callback(null, result), (err) => {
+                        winston.error('err in startDelayed job: ', err);
+                        callback(err);
+                    })
+            }, retryOptions)
+        };
+
+        // eslint-disable-next-line new-cap
+        this.multiWorker = new Resque.multiWorker({
+            connection: redisConnection,
+            queues: [this.periodicBuildQueue],
+            minTaskProcessors: 1,
+            maxTaskProcessors: 10,
+            checkTimeout: 1000,
+            maxEventLoopDelay: 10,
+            toDisconnectProcessors: true
+        }, jobs);
+        // eslint-disable-next-line new-cap
+        this.scheduler = new Resque.scheduler({ connection: redisConnection });
+
+        this.multiWorker.on('start', workerId =>
+            winston.info(`worker[${workerId}] started`));
+        this.multiWorker.on('end', workerId =>
+            winston.info(`worker[${workerId}] ended`));
+        this.multiWorker.on('cleaning_worker', (workerId, worker, pid) =>
+            winston.info(`cleaning old worker ${worker} pid ${pid}`));
+        this.multiWorker.on('job', (workerId, queue, job) =>
+            winston.info(`worker[${workerId}] working job ${queue} ${JSON.stringify(job)}`));
+        this.multiWorker.on('reEnqueue', (workerId, queue, job, plugin) =>
+            // eslint-disable-next-line max-len
+            winston.info(`worker[${workerId}] reEnqueue job (${plugin}) ${queue} ${JSON.stringify(job)}`));
+        this.multiWorker.on('success', (workerId, queue, job, result) =>
+            // eslint-disable-next-line max-len
+            winston.info(`worker[${workerId}] ${job} success ${queue} ${JSON.stringify(job)} >> ${result}`));
+        this.multiWorker.on('failure', (workerId, queue, job, failure) =>
+            // eslint-disable-next-line max-len
+            winston.info(`worker[${workerId}] ${job} failure ${queue} ${JSON.stringify(job)} >> ${failure}`));
+        this.multiWorker.on('error', (workerId, queue, job, error) =>
+            winston.error(`worker[${workerId}] error ${queue} ${JSON.stringify(job)} >> ${error}`));
+        this.multiWorker.on('pause', workerId =>
+            winston.info(`worker[${workerId}] paused`));
+
+        // multiWorker emitters
+        this.multiWorker.on('internalError', error =>
+            winston.error(error));
+        this.multiWorker.on('multiWorkerAction', (verb, delay) =>
+            winston.info(`*** checked for worker status: ${verb} (event loop delay: ${delay}ms)`));
+
+        this.scheduler.on('start', () =>
+            winston.info('scheduler started'));
+        this.scheduler.on('end', () =>
+            winston.info('scheduler ended'));
+        this.scheduler.on('master', state =>
+            winston.info(`scheduler became master ${state}`));
+        this.scheduler.on('error', error =>
+            winston.info(`scheduler error >> ${error}`));
+        this.scheduler.on('working_timestamp', timestamp =>
+            winston.info(`scheduler working timestamp ${timestamp}`));
+        this.scheduler.on('transferred_job', (timestamp, job) =>
+            winston.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
+
+        this.multiWorker.start();
+        this.scheduler.connect(() => {
+            this.scheduler.start();
+        });
+
+        process.on('SIGTERM', () => {
+            this.multiWorker.end((error) => {
+                if (error) {
+                    winston.error(`failed to end the worker: ${error}`);
+                }
+
+                this.scheduler.end((err) => {
+                    if (err) {
+                        winston.error(`failed to end the scheduler: ${err}`);
+                        process.exit(128);
+                    }
+                    process.exit(0);
+                });
+            });
+        });
     }
 
     /**
@@ -79,27 +182,29 @@ class ExecutorQueue extends Executor {
         };
 
         return req(options, (err, response) => {
-            if (err) {
-                return Promise.reject(err);
+            if (!err && response.statusCode === 201) {
+                return Promise.resolve(response);
             }
 
-            return Promise.resolve(response);
+            return Promise.reject(err);
         });
     }
 
     /**
      * Starts a new periodic build in an executor
      * @method _startPeriodic
-     * @param {Object}   config             Configuration
-     * @param {Object}   config.pipeline    Pipeline of the job
-     * @param {Object}   config.job         Job object to create periodic builds for
-     * @param {Function} config.tokenGen    Function to generate JWT from username, scope and scmContext
-     * @param {Boolean}  config.isUpdate    Boolean to determine if updating existing periodic build
+     * @param {Object}   config              Configuration
+     * @param {Object}   config.pipeline     Pipeline of the job
+     * @param {Object}   config.job          Job object to create periodic builds for
+     * @param {Function} config.tokenGen     Function to generate JWT from username, scope and scmContext
+     * @param {Boolean}  config.isUpdate     Boolean to determine if updating existing periodic build
+     * @param {Boolean}  config.triggerBuild Flag to post new build event
      * @return {Promise}
      */
-    async _startPeriodic(config, triggerBuild = false) {
+    async _startPeriodic(config) {
         // eslint-disable-next-line max-len
-        const buildCron = config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'];
+        const buildCron = hoek.reach(config.job, 'permutations>0>annotations>screwdriver.cd/buildPeriodically',
+            { separator: '>' });
 
         // Save tokenGen to current executor object so we can access it in postBuildEvent
         if (!this.tokenGen) {
@@ -111,10 +216,9 @@ class ExecutorQueue extends Executor {
             await this._stopPeriodic({
                 jobId: config.job.id
             });
-            delete config.isUpdate;
         }
 
-        if (triggerBuild) {
+        if (config.triggerBuild) {
             await this.postBuildEvent(config);
         }
 
@@ -125,14 +229,20 @@ class ExecutorQueue extends Executor {
 
             // Store the config in redis
             await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
-                config.job.id, JSON.stringify(config));
+                config.job.id, JSON.stringify(Object.assign(config, {
+                    isUpdate: false,
+                    triggerBuild: false
+                })));
 
             // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-            await this.queueBreaker.runCommand('enqueueAt', next,
-                this.buildQueue, 'startDelayed', [{
+            return this.queueBreaker.runCommand('enqueueAt', next,
+                this.periodicBuildQueue, 'startDelayed', [{
                     jobId: config.job.id
-                }]);
+                }])
+                .catch(() => Promise.resolve());
         }
+
+        return Promise.resolve();
     }
 
     /**
@@ -145,7 +255,7 @@ class ExecutorQueue extends Executor {
     async _stopPeriodic(config) {
         await this.connect();
 
-        await this.queueBreaker.runCommand('del', this.buildQueue, 'startDelayed', [{
+        await this.queueBreaker.runCommand('delDelayed', this.periodicBuildQueue, 'startDelayed', [{
             jobId: config.jobId
         }]);
 

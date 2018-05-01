@@ -6,7 +6,7 @@
   "permutations": [
       {
           "annotations": {
-              "beta.screwdriver.cd/buildPeriodically": "* * * * *"
+              "screwdriver.cd/buildPeriodically": "* * * * *"
           }
       }
   ]
