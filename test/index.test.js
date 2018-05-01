@@ -56,7 +56,9 @@ describe('index test', () => {
             hset: sinon.stub().yieldsAsync()
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
-        cronMock = sinon.stub().returns(1);
+        cronMock = {
+            next: sinon.stub().returns(1500000)
+        };
 
         mockery.registerMock('node-resque', resqueMock);
         mockery.registerMock('ioredis', redisConstructorMock);
@@ -139,8 +141,8 @@ describe('index test', () => {
                 assert.calledOnce(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'periodicBuilds', testJob.id,
                     JSON.stringify(testDelayedConfig));
-                assert.calledWith(cronMock, '* * * * *');
-                assert.calledWith(queueMock.enqueueAt, 1, 'builds', 'startDelayed', [{
+                assert.calledWith(cronMock.next, '* * * * *', testJob.id);
+                assert.calledWith(queueMock.enqueueAt, 1500000, 'builds', 'startDelayed', [{
                     jobId: testJob.id
                 }]);
             });
@@ -152,7 +154,7 @@ describe('index test', () => {
                 assert.calledTwice(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'periodicBuilds', testJob.id,
                     JSON.stringify(testDelayedConfig));
-                assert.calledWith(queueMock.enqueueAt, 1, 'builds', 'startDelayed', [{
+                assert.calledWith(queueMock.enqueueAt, 1500000, 'builds', 'startDelayed', [{
                     jobId: testJob.id
                 }]);
                 assert.calledWith(queueMock.del, 'builds', 'startDelayed', [{

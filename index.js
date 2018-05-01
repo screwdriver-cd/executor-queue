@@ -5,7 +5,7 @@ const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const req = require('request');
-const cron = require('./lib/transformCron.js');
+const cron = require('./lib/transformCron');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -106,7 +106,7 @@ class ExecutorQueue extends Executor {
         if (config.isUpdate) {
             // eslint-disable-next-line no-underscore-dangle
             await this._stopPeriodic({
-                jobId: config
+                jobId: config.job.id
             });
         }
 
@@ -117,7 +117,7 @@ class ExecutorQueue extends Executor {
         await this.connect();
 
         // eslint-disable-next-line max-len
-        const next = cron(config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'],
+        const next = cron.next(config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'],
             config.job.id);
 
         // Store the config in redis

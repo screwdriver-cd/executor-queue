@@ -18,12 +18,12 @@ describe('transformCron', () => {
         // 6 fields
 
         cron = '1 2 3 4 5 6';
-        assert.throws(() => transformCron(cron, jobId),
+        assert.throws(() => transformCron.transform(cron, jobId),
             Error, '1 2 3 4 5 6 does not have exactly 5 fields');
 
         // 4 fields
         cron = '1 2 3 4';
-        assert.throws(() => transformCron(cron, jobId),
+        assert.throws(() => transformCron.transform(cron, jobId),
             Error, '1 2 3 4 does not have exactly 5 fields');
     });
 
@@ -32,22 +32,23 @@ describe('transformCron', () => {
 
         // H * * * *
         cron = 'H * * * *';
-        assert.deepEqual(transformCron(cron, jobId), `${minutesHash} * * * *`);
+        assert.deepEqual(transformCron.transform(cron, jobId), `${minutesHash} * * * *`);
 
         // * H/2 * * *
         cron = '* H/2 * * *';
-        assert.deepEqual(transformCron(cron, jobId), `${minutesHash} ${hoursHash}/2 * * *`);
+        assert.deepEqual(transformCron.transform(cron, jobId),
+            `${minutesHash} ${hoursHash}/2 * * *`);
 
         // * H(0-5) * * *
         cron = '* H(0-5) * * *';
-        assert.deepEqual(transformCron(cron, jobId),
+        assert.deepEqual(transformCron.transform(cron, jobId),
             `${minutesHash} ${evaluateHash(jobId, 0, 5)} * * *`);
     });
 
     it('should throw if the cron expression has an invalid range value', () => {
         const cron = '* H(99-100) * * *';
 
-        assert.throws(() => transformCron(cron, jobId),
+        assert.throws(() => transformCron.transform(cron, jobId),
             Error, 'H(99-100) has an invalid range, expected range 0-23');
     });
 });
