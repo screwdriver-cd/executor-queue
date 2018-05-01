@@ -98,6 +98,9 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startPeriodic(config, triggerBuild = false) {
+        // eslint-disable-next-line max-len
+        const buildCron = config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'];
+
         // Save tokenGen to current executor object so we can access it in postBuildEvent
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
@@ -108,27 +111,28 @@ class ExecutorQueue extends Executor {
             await this._stopPeriodic({
                 jobId: config.job.id
             });
+            delete config.isUpdate;
         }
 
         if (triggerBuild) {
             await this.postBuildEvent(config);
         }
 
-        await this.connect();
+        if (buildCron) {
+            await this.connect();
 
-        // eslint-disable-next-line max-len
-        const next = cron.next(config.job.permutations[0].annotations['beta.screwdriver.cd/buildPeriodically'],
-            config.job.id);
+            const next = cron.next(buildCron, config.job.id);
 
-        // Store the config in redis
-        await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
-            config.job.id, JSON.stringify(config));
+            // Store the config in redis
+            await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                config.job.id, JSON.stringify(config));
 
-        // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-        await this.queueBreaker.runCommand('enqueueAt', next,
-            this.buildQueue, 'startDelayed', [{
-                jobId: config.job.id
-            }]);
+            // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
+            await this.queueBreaker.runCommand('enqueueAt', next,
+                this.buildQueue, 'startDelayed', [{
+                    jobId: config.job.id
+                }]);
+        }
     }
 
     /**
