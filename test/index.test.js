@@ -57,12 +57,13 @@ describe('index test', () => {
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
         cronMock = {
+            transform: sinon.stub().returns('H H H H H'),
             next: sinon.stub().returns(1500000)
         };
 
         mockery.registerMock('node-resque', resqueMock);
         mockery.registerMock('ioredis', redisConstructorMock);
-        mockery.registerMock('./lib/transformCron', cronMock);
+        mockery.registerMock('./lib/cron', cronMock);
 
         /* eslint-disable global-require */
         Executor = require('../index');
@@ -141,7 +142,8 @@ describe('index test', () => {
                 assert.calledOnce(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'periodicBuilds', testJob.id,
                     JSON.stringify(testDelayedConfig));
-                assert.calledWith(cronMock.next, '* * * * *', testJob.id);
+                assert.calledWith(cronMock.transform, '* * * * *', testJob.id);
+                assert.calledWith(cronMock.next, 'H H H H H');
                 assert.calledWith(queueMock.enqueueAt, 1500000, 'builds', 'startDelayed', [{
                     jobId: testJob.id
                 }]);

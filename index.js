@@ -5,7 +5,7 @@ const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const req = require('request');
-const cron = require('./lib/transformCron');
+const cron = require('./lib/cron');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 
@@ -121,7 +121,7 @@ class ExecutorQueue extends Executor {
         if (buildCron) {
             await this.connect();
 
-            const next = cron.next(buildCron, config.job.id);
+            const next = cron.next(cron.transform(buildCron, config.job.id));
 
             // Store the config in redis
             await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
