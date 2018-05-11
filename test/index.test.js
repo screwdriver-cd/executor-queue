@@ -311,8 +311,13 @@ describe('index test', () => {
             buildId: 8609,
             container: 'node:4',
             apiUri: 'http://api.com',
-            token: 'asdf'
+            token: 'asdf',
+            blockedBy: [
+                111,
+                234
+            ]
         }).then(() => {
+            testConfig.blockedBy = [111, 234];
             assert.calledOnce(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', testConfig.buildId,
                 JSON.stringify(testConfig));
