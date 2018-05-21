@@ -163,8 +163,8 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async postBuildEvent({ pipeline, job, apiUri }) {
-        const jwt = this.tokenGen(pipeline.admin
-            .then(realAdmin => realAdmin.username), {}, pipeline.scmContext);
+        const admin = await pipeline.admin;
+        const jwt = this.tokenGen(admin.username, {}, pipeline.scmContext);
 
         const options = {
             url: `${apiUri}/v4/events`,
