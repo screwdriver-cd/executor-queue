@@ -16,8 +16,6 @@ const partialTestConfig = {
     jobId: testConfig.jobId,
     blockedBy: testConfig.blockedBy
 };
-const partialTestConfigToString = Object.assign({}, partialTestConfig, {
-    blockedBy: testConfig.blockedBy.toString() });
 const tokenGen = sinon.stub().returns('123456abc');
 const testDelayedConfig = {
     pipeline: testPipeline,
@@ -304,14 +302,7 @@ describe('index test', () => {
             assert.calledOnce(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', testConfig.buildId,
                 JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
-        }));
-
-        it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
-            assert.calledOnce(queueMock.connect);
-            assert.calledWith(redisMock.hset, 'buildConfigs', testConfig.buildId,
-                JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
+            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
         }));
 
         it('doesn\'t call connect if there\'s already a connection', () => {
@@ -319,8 +310,7 @@ describe('index test', () => {
 
             return executor.start(testConfig).then(() => {
                 assert.notCalled(queueMock.connect);
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
+                assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfig]);
             });
         });
     });
@@ -339,7 +329,7 @@ describe('index test', () => {
         it('removes a start event from the queue and the cached buildconfig',
             () => executor.stop(partialTestConfig).then(() => {
                 assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
+                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfig]);
                 assert.calledWith(redisMock.hdel, 'buildConfigs', 8609);
                 assert.notCalled(queueMock.enqueue);
             }));
@@ -349,8 +339,8 @@ describe('index test', () => {
 
             return executor.stop(partialTestConfig).then(() => {
                 assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
-                assert.calledWith(queueMock.enqueue, 'builds', 'stop', [partialTestConfigToString]);
+                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfig]);
+                assert.calledWith(queueMock.enqueue, 'builds', 'stop', [partialTestConfig]);
             });
         });
 
@@ -361,7 +351,7 @@ describe('index test', () => {
                 'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
             } })).then(() => {
                 assert.notCalled(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
+                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfig]);
             });
         });
     });
