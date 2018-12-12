@@ -320,7 +320,7 @@ describe('index test', () => {
     });
 
     describe('_start', () => {
-        it('rejects if it can\'t establish a connection', function () {
+        it('rejects if it can\'t establish a connection', () => {
             queueMock.connect.yieldsAsync(new Error('couldn\'t connect'));
 
             return executor.start(testConfig).then(() => {
@@ -331,6 +331,13 @@ describe('index test', () => {
         });
 
         it('enqueues a build and caches the config', () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            sandbox.useFakeTimers(dateNow);
             buildMock.stats = {};
             testConfig.build = buildMock;
 
@@ -341,6 +348,8 @@ describe('index test', () => {
                 assert.calledWith(queueMock.enqueue, 'builds', 'start',
                     [partialTestConfigToString]);
                 assert.calledOnce(buildMock.update);
+                assert.equal(buildMock.stats.queueTime, isoTime);
+                sandbox.restore();
             });
         }
         );
@@ -349,7 +358,6 @@ describe('index test', () => {
             assert.calledOnce(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
                 JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
         }));
 
