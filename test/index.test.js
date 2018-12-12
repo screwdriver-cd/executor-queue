@@ -51,7 +51,6 @@ describe('index test', () => {
     let pipelineMock;
     let buildMock;
     let pipelineFactoryMock;
-    let buildFactoryMock;
 
     before(() => {
         mockery.enable({
@@ -116,9 +115,6 @@ describe('index test', () => {
                 id: buildId
             })
         };
-        buildFactoryMock = {
-            get: sinon.stub().resolves(buildMock)
-        };
 
         mockery.registerMock('node-resque', resqueMock);
         mockery.registerMock('ioredis', redisConstructorMock);
@@ -137,8 +133,7 @@ describe('index test', () => {
                     retries: 1
                 }
             },
-            pipelineFactory: pipelineFactoryMock,
-            buildFactory: buildFactoryMock
+            pipelineFactory: pipelineFactoryMock
         });
     });
 
@@ -181,8 +176,7 @@ describe('index test', () => {
         it('constructs the executor when no breaker config is passed in', () => {
             executor = new Executor({
                 redisConnection: testConnection,
-                pipelineFactory: pipelineFactoryMock,
-                buildFactory: buildFactoryMock
+                pipelineFactory: pipelineFactoryMock
             });
 
             assert.instanceOf(executor, Executor);
@@ -192,8 +186,7 @@ describe('index test', () => {
             executor = new Executor({
                 redisConnection: testConnection,
                 prefix: 'beta_',
-                pipelineFactory: pipelineFactoryMock,
-                buildFactory: buildFactoryMock
+                pipelineFactory: pipelineFactoryMock
             });
 
             assert.instanceOf(executor, Executor);
@@ -209,13 +202,6 @@ describe('index test', () => {
         it('throws when not given a pipelineFactory', () => {
             assert.throws(() => new Executor({
                 redisConnection: testConnection
-            }));
-        });
-
-        it('throws when not given a buildFactory', () => {
-            assert.throws(() => new Executor({
-                redisConnection: testConnection,
-                pipelineFactory: pipelineFactoryMock
             }));
         });
     });
@@ -344,14 +330,20 @@ describe('index test', () => {
             });
         });
 
-        it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
-            assert.calledOnce(queueMock.connect);
-            assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
-            assert.calledWith(buildFactoryMock.get, buildId);
-            assert.calledOnce(buildMock.update);
-        }));
+        it('enqueues a build and caches the config', () => {
+            buildMock.stats = {};
+            testConfig.build = buildMock;
+
+            return executor.start(testConfig).then(() => {
+                assert.calledOnce(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
+                    JSON.stringify(testConfig));
+                assert.calledWith(queueMock.enqueue, 'builds', 'start',
+                    [partialTestConfigToString]);
+                assert.calledOnce(buildMock.update);
+            });
+        }
+        );
 
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
             assert.calledOnce(queueMock.connect);

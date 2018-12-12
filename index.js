@@ -19,7 +19,6 @@ class ExecutorQueue extends Executor {
      * @param  {Object}         config                      Object with executor and ecosystem
      * @param  {Object}         config.redisConnection      Connection details for redis
      * @param  {Object}         config.pipelineFactory      Pipeline Factory instance
-     * @param  {Object}         config.buildFactory         Build Factory instance
      * @param  {String}         [config.prefix]             Prefix for queue name
      * @param  {Object}         [config.breaker]            Optional breaker config
      */
@@ -29,10 +28,6 @@ class ExecutorQueue extends Executor {
         }
         if (!config.pipelineFactory) {
             throw new Error('No PipelineFactory instance passed in');
-        }
-
-        if (!config.buildFactory) {
-            throw new Error('No buildFactory instance passed in');
         }
 
         const breaker = Object.assign({}, config.breaker || {});
@@ -46,7 +41,6 @@ class ExecutorQueue extends Executor {
         this.periodicBuildTable = `${this.prefix}periodicBuildConfigs`;
         this.tokenGen = null;
         this.pipelineFactory = config.pipelineFactory;
-        this.buildFactory = config.buildFactory;
 
         const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
 
@@ -281,6 +275,7 @@ class ExecutorQueue extends Executor {
      * @async  _start
      * @param  {Object} config               Configuration
      * @param  {Object} [config.annotations] Optional key/value object
+     * @param  {String} config.build         Build object
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
@@ -291,8 +286,9 @@ class ExecutorQueue extends Executor {
      */
     async _start(config) {
         await this.connect();
-        const { buildId, jobId, blockedBy } = config;
+        const { build, buildId, jobId, blockedBy } = config;
 
+        delete config.build;
         // Store the config in redis
         await this.redisBreaker.runCommand('hset', this.buildConfigTable,
             buildId, JSON.stringify(config));
@@ -303,10 +299,12 @@ class ExecutorQueue extends Executor {
             jobId,
             blockedBy: blockedBy.toString()
         }]);
-        const build = await this.buildFactory.get(config.buildId);
 
-        build.statusMessage = 'Build is waiting in queue...';
-        await build.update();
+        // for backward compatibility
+        if (build && build.stats) {
+            build.stats.queueTime = (new Date()).toISOString();
+            await build.update();
+        }
 
         return enq;
     }
