@@ -348,7 +348,7 @@ describe('index test', () => {
                 assert.calledWith(queueMock.enqueue, 'builds', 'start',
                     [partialTestConfigToString]);
                 assert.calledOnce(buildMock.update);
-                assert.equal(buildMock.stats.queueTime, isoTime);
+                assert.equal(buildMock.stats.queueEnterTime, isoTime);
                 sandbox.restore();
             });
         }

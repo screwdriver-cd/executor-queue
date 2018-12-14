@@ -302,7 +302,7 @@ class ExecutorQueue extends Executor {
 
         // for backward compatibility
         if (build && build.stats) {
-            build.stats.queueTime = (new Date()).toISOString();
+            build.stats.queueEnterTime = (new Date()).toISOString();
             await build.update();
         }
 
