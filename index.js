@@ -330,6 +330,7 @@ class ExecutorQueue extends Executor {
         }
 
         const numDeleted = await this.queueBreaker.runCommand('del', this.buildQueue, 'start', [{
+            build,
             buildId,
             jobId,
             blockedBy
