@@ -20,15 +20,10 @@ const partialTestConfig = {
 const partialTestConfigToString = Object.assign({}, partialTestConfig, {
     blockedBy: blockedBy.toString() });
 const tokenGen = sinon.stub().returns('123456abc');
-const testDelayedConfig = {
-    pipeline: testPipeline,
-    job: testJob,
-    apiUri: 'http://localhost',
-    tokenGen
-};
 const testAdmin = {
     username: 'admin'
 };
+let testDelayedConfig;
 
 const EventEmitter = require('events').EventEmitter;
 
@@ -60,6 +55,12 @@ describe('index test', () => {
     });
 
     beforeEach(() => {
+        testDelayedConfig = {
+            pipeline: testPipeline,
+            job: testJob,
+            apiUri: 'http://localhost',
+            tokenGen
+        };
         multiWorker = function () {
             this.start = () => {};
             this.end = sinon.stub();
@@ -238,8 +239,20 @@ describe('index test', () => {
             });
         });
 
+        it('does not enqueue a new delayed job in the queue if job is PR', () => {
+            testDelayedConfig.job.name = 'PR-1:deploy';
+            executor.startPeriodic(testDelayedConfig).then(() => {
+                assert.notCalled(queueMock.connect);
+                assert.notCalled(redisMock.hset);
+                assert.notCalled(cronMock.transform);
+                assert.notCalled(cronMock.next);
+                assert.notCalled(queueMock.enqueueAt);
+            });
+        });
+
         it('stops and reEnqueues an existing job if isUpdate flag is passed', () => {
             testDelayedConfig.isUpdate = true;
+            testDelayedConfig.job.name = 'deploy';
             executor.startPeriodic(testDelayedConfig).then(() => {
                 assert.calledTwice(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'periodicBuildConfigs', testJob.id,

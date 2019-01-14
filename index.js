@@ -230,7 +230,9 @@ class ExecutorQueue extends Executor {
                 .catch(() => Promise.resolve());
         }
 
-        if (buildCron && config.job.state === 'ENABLED' && !config.job.archived) {
+        // Do not run periodic build if job is PR
+        if (buildCron && config.job.state === 'ENABLED' && !config.job.archived &&
+            !/^PR-/.test(config.job.name)) {
             await this.connect();
 
             const next = cron.next(cron.transform(buildCron, config.job.id));
