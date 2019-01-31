@@ -11,11 +11,12 @@ const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
 const testPipeline = require('./data/testPipeline.json');
 const testJob = require('./data/testJob.json');
-const { buildId, jobId, blockedBy } = testConfig;
+const { buildId, jobId, blockedBy, freezeWindows } = testConfig;
 const partialTestConfig = {
     buildId,
     jobId,
-    blockedBy
+    blockedBy,
+    freezeWindows
 };
 const partialTestConfigToString = Object.assign({}, partialTestConfig, {
     blockedBy: blockedBy.toString() });

@@ -277,6 +277,7 @@ class ExecutorQueue extends Executor {
      * @param  {Object} [config.annotations] Optional key/value object
      * @param  {String} config.build         Build object
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
+     * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
      * @param  {String} config.buildId       Unique ID for a build
@@ -286,7 +287,7 @@ class ExecutorQueue extends Executor {
      */
     async _start(config) {
         await this.connect();
-        const { build, buildId, jobId, blockedBy } = config;
+        const { build, buildId, jobId, blockedBy, freezeWindows } = config;
 
         delete config.build;
         // Store the config in redis
@@ -297,7 +298,8 @@ class ExecutorQueue extends Executor {
         const enq = await this.queueBreaker.runCommand('enqueue', this.buildQueue, 'start', [{
             buildId,
             jobId,
-            blockedBy: blockedBy.toString()
+            blockedBy: blockedBy.toString(),
+            freezeWindows: freezeWindows.toString()
         }]);
 
         // for backward compatibility
@@ -315,6 +317,7 @@ class ExecutorQueue extends Executor {
      * @async  _stop
      * @param  {Object} config               Configuration
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
+     * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {String} config.jobId         JobID that this build belongs to
      * @return {Promise}
@@ -325,15 +328,21 @@ class ExecutorQueue extends Executor {
         const { buildId, jobId } = config; // in case config contains something else
 
         let blockedBy;
+        let freezeWindows;
 
         if (config.blockedBy !== undefined) {
             blockedBy = config.blockedBy.toString();
         }
 
+        if (config.freezeWindows !== undefined) {
+            freezeWindows = config.freezeWindows.toString();
+        }
+
         const numDeleted = await this.queueBreaker.runCommand('del', this.buildQueue, 'start', [{
             buildId,
             jobId,
-            blockedBy
+            blockedBy,
+            freezeWindows
         }]);
         const deleteKey = `deleted_${jobId}_${buildId}`;
         let started = true;
@@ -353,6 +362,7 @@ class ExecutorQueue extends Executor {
             buildId,
             jobId,
             blockedBy,
+            freezeWindows,
             started // call executor.stop if the job already started
         }]);
     }
