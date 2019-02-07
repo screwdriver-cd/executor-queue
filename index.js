@@ -8,6 +8,7 @@ const req = require('request');
 const hoek = require('hoek');
 const winston = require('winston');
 const cron = require('./lib/cron');
+const timeOutOfWindows = require('./lib/freezeWindows');
 const Breaker = fuses.breaker;
 const FuseBox = fuses.box;
 const EXPIRE_TIME = 1800; // 30 mins
@@ -37,8 +38,10 @@ class ExecutorQueue extends Executor {
         this.prefix = config.prefix || '';
         this.buildQueue = `${this.prefix}builds`;
         this.periodicBuildQueue = `${this.prefix}periodicBuilds`;
+        this.frozenBuildQueue = `${this.prefix}frozenBuilds`;
         this.buildConfigTable = `${this.prefix}buildConfigs`;
         this.periodicBuildTable = `${this.prefix}periodicBuildConfigs`;
+        this.frozenBuildTable = `${this.prefix}frozenBuildConfigs`;
         this.tokenGen = null;
         this.pipelineFactory = config.pipelineFactory;
 
@@ -84,13 +87,22 @@ class ExecutorQueue extends Executor {
                         winston.error('err in startDelayed job: ', err);
                         callback(err);
                     })
+            }, retryOptions),
+            startFrozen: Object.assign({ perform: (jobConfig, callback) =>
+                this.redisBreaker.runCommand('hget', this.frozenBuildTable,
+                    jobConfig.jobId)
+                    .then(fullConfig => this.startNewEvent(JSON.parse(fullConfig)))
+                    .then(result => callback(null, result), (err) => {
+                        winston.error('err in startFrozen job: ', err);
+                        callback(err);
+                    })
             }, retryOptions)
         };
 
         // eslint-disable-next-line new-cap
         this.multiWorker = new Resque.multiWorker({
             connection: redisConnection,
-            queues: [this.periodicBuildQueue],
+            queues: [this.periodicBuildQueue, this.frozenBuildQueue],
             minTaskProcessors: 1,
             maxTaskProcessors: 10,
             checkTimeout: 1000,
@@ -166,9 +178,10 @@ class ExecutorQueue extends Executor {
      * @param {Object} config.pipeline Pipeline of the job
      * @param {Object} config.job      Job object to create periodic builds for
      * @param {String} config.apiUri   Base URL of the Screwdriver API
+     * @param {String} config.eventId  Parent event ID (optional)
      * @return {Promise}
      */
-    async postBuildEvent({ pipeline, job, apiUri }) {
+    async postBuildEvent({ pipeline, job, apiUri, eventId }) {
         const pipelineInstance = await this.pipelineFactory.get(pipeline.id);
         const admin = await pipelineInstance.getFirstAdmin();
         const jwt = this.tokenGen(admin.username, {}, pipeline.scmContext);
@@ -186,6 +199,10 @@ class ExecutorQueue extends Executor {
                 startFrom: job.name
             }
         };
+
+        if (eventId) {
+            options.body.parentEventId = eventId;
+        }
 
         return req(options, (err, response) => {
             if (!err && response.statusCode === 201) {
@@ -271,6 +288,17 @@ class ExecutorQueue extends Executor {
     }
 
     /**
+     * Calls postBuildEvent() with job configuration
+     * @async _startNewEvent
+     * @param {Object} config       Configuration
+     * @return {Promise}
+     */
+    async _startNewEvent(config) {
+        return this.postBuildEvent(config)
+            .catch(() => Promise.resolve());
+    }
+
+    /**
      * Starts a new build in an executor
      * @async  _start
      * @param  {Object} config               Configuration
@@ -281,6 +309,9 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
      * @param  {String} config.buildId       Unique ID for a build
+     * @param  {String} config.eventId       eventID that this build belongs to
+     * @param  {Object} config.pipeline      Pipeline of the job
+     * @param  {Fn}     config.tokenGen      Function to generate JWT from username, scope and scmContext
      * @param  {String} config.container     Container for the build to run in
      * @param  {String} config.token         JWT to act on behalf of the build
      * @return {Promise}
@@ -289,18 +320,45 @@ class ExecutorQueue extends Executor {
         await this.connect();
         const { build, buildId, jobId, blockedBy, freezeWindows } = config;
 
-        delete config.build;
-        // Store the config in redis
-        await this.redisBreaker.runCommand('hset', this.buildConfigTable,
-            buildId, JSON.stringify(config));
+        if (!this.tokenGen) {
+            this.tokenGen = config.tokenGen;
+        }
 
-        // Note: arguments to enqueue are [queue name, job name, array of args]
-        const enq = await this.queueBreaker.runCommand('enqueue', this.buildQueue, 'start', [{
-            buildId,
-            jobId,
-            blockedBy: blockedBy.toString(),
-            freezeWindows: freezeWindows.toString()
-        }]);
+        delete config.build;
+
+        const currentTime = new Date();
+        const origTime = new Date(currentTime.getTime());
+
+        timeOutOfWindows(freezeWindows, currentTime);
+
+        let enq;
+
+        if (currentTime.getTime() > origTime.getTime()) {
+            await this.queueBreaker.runCommand('delDelayed', this.frozenBuildQueue,
+                'startFrozen', [{
+                    jobId
+                }]);
+
+            await this.redisBreaker.runCommand('hset', this.frozenBuildTable,
+                jobId, JSON.stringify(config));
+
+            enq = await this.queueBreaker.runCommand('enqueueAt', currentTime.getTime(),
+                this.frozenBuildQueue, 'startFrozen', [{
+                    jobId
+                }]
+            );
+        } else {
+            // Store the config in redis
+            await this.redisBreaker.runCommand('hset', this.buildConfigTable,
+                buildId, JSON.stringify(config));
+
+            // Note: arguments to enqueue are [queue name, job name, array of args]
+            enq = await this.queueBreaker.runCommand('enqueue', this.buildQueue, 'start', [{
+                buildId,
+                jobId,
+                blockedBy: blockedBy.toString()
+            }]);
+        }
 
         // for backward compatibility
         if (build && build.stats) {
@@ -317,7 +375,6 @@ class ExecutorQueue extends Executor {
      * @async  _stop
      * @param  {Object} config               Configuration
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
-     * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {String} config.jobId         JobID that this build belongs to
      * @return {Promise}
@@ -328,21 +385,15 @@ class ExecutorQueue extends Executor {
         const { buildId, jobId } = config; // in case config contains something else
 
         let blockedBy;
-        let freezeWindows;
 
         if (config.blockedBy !== undefined) {
             blockedBy = config.blockedBy.toString();
         }
 
-        if (config.freezeWindows !== undefined) {
-            freezeWindows = config.freezeWindows.toString();
-        }
-
         const numDeleted = await this.queueBreaker.runCommand('del', this.buildQueue, 'start', [{
             buildId,
             jobId,
-            blockedBy,
-            freezeWindows
+            blockedBy
         }]);
         const deleteKey = `deleted_${jobId}_${buildId}`;
         let started = true;
@@ -362,7 +413,6 @@ class ExecutorQueue extends Executor {
             buildId,
             jobId,
             blockedBy,
-            freezeWindows,
             started // call executor.stop if the job already started
         }]);
     }
