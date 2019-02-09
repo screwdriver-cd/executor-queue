@@ -91,7 +91,7 @@ class ExecutorQueue extends Executor {
             startFrozen: Object.assign({ perform: (jobConfig, callback) =>
                 this.redisBreaker.runCommand('hget', this.frozenBuildTable,
                     jobConfig.jobId)
-                    .then(fullConfig => this.startNewEvent(JSON.parse(fullConfig)))
+                    .then(fullConfig => this.startFrozen(JSON.parse(fullConfig)))
                     .then(result => callback(null, result), (err) => {
                         winston.error('err in startFrozen job: ', err);
                         callback(err);
@@ -174,11 +174,11 @@ class ExecutorQueue extends Executor {
     /**
      * Posts a new build event to the API
      * @method postBuildEvent
-     * @param {Object} config          Configuration
-     * @param {Object} config.pipeline Pipeline of the job
-     * @param {Object} config.job      Job object to create periodic builds for
-     * @param {String} config.apiUri   Base URL of the Screwdriver API
-     * @param {String} config.eventId  Parent event ID (optional)
+     * @param {Object} config           Configuration
+     * @param {Number} [config.eventId] Optional Parent event ID (optional)
+     * @param {Object} config.pipeline  Pipeline of the job
+     * @param {Object} config.job       Job object to create periodic builds for
+     * @param {String} config.apiUri    Base URL of the Screwdriver API
      * @return {Promise}
      */
     async postBuildEvent({ pipeline, job, apiUri, eventId }) {
@@ -206,6 +206,30 @@ class ExecutorQueue extends Executor {
 
         return req(options, (err, response) => {
             if (!err && response.statusCode === 201) {
+                return Promise.resolve(response);
+            }
+
+            return Promise.reject(err);
+        });
+    }
+
+    async updateBuildStatus({ buildId, status, statusMessage, token, apiUri }) {
+        const options = {
+            json: true,
+            method: 'PUT',
+            uri: `${apiUri}/v4/builds/${buildId}`,
+            body: {
+                status,
+                statusMessage
+            },
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        return req(options, (err, response) => {
+            if (!err && response.statusCode === 200) {
                 return Promise.resolve(response);
             }
 
@@ -289,13 +313,30 @@ class ExecutorQueue extends Executor {
 
     /**
      * Calls postBuildEvent() with job configuration
-     * @async _startNewEvent
+     * @async _startFrozen
      * @param {Object} config       Configuration
      * @return {Promise}
      */
-    async _startNewEvent(config) {
+    async _startFrozen(config) {
         return this.postBuildEvent(config)
             .catch(() => Promise.resolve());
+    }
+
+    /**
+     * Stops a previously enqueued frozen build in an executor
+     * @async  stopFrozen
+     * @param  {Object}  config        Configuration
+     * @param  {Integer} config.jobId  ID of the job with frozen builds
+     * @return {Promise}
+     */
+    async _stopFrozen(config) {
+        await this.connect();
+
+        await this.queueBreaker.runCommand('delDelayed', this.frozenBuildQueue, 'startFrozen', [{
+            jobId: config.jobId
+        }]);
+
+        return this.redisBreaker.runCommand('hdel', this.frozenBuildTable, config.jobId);
     }
 
     /**
@@ -303,13 +344,13 @@ class ExecutorQueue extends Executor {
      * @async  _start
      * @param  {Object} config               Configuration
      * @param  {Object} [config.annotations] Optional key/value object
+     * @param  {Number} [config.eventId]     Optional eventID that this build belongs to
      * @param  {String} config.build         Build object
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
      * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
      * @param  {String} config.buildId       Unique ID for a build
-     * @param  {String} config.eventId       eventID that this build belongs to
      * @param  {Object} config.pipeline      Pipeline of the job
      * @param  {Fn}     config.tokenGen      Function to generate JWT from username, scope and scmContext
      * @param  {String} config.container     Container for the build to run in
@@ -318,13 +359,18 @@ class ExecutorQueue extends Executor {
      */
     async _start(config) {
         await this.connect();
-        const { build, buildId, jobId, blockedBy, freezeWindows } = config;
+        const { build, buildId, jobId, blockedBy, freezeWindows, token, apiUri } = config;
 
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
         }
 
         delete config.build;
+
+        // eslint-disable-next-line no-underscore-dangle
+        await this._stopFrozen({
+            jobId
+        });
 
         const currentTime = new Date();
         const origTime = new Date(currentTime.getTime());
@@ -334,6 +380,14 @@ class ExecutorQueue extends Executor {
         let enq;
 
         if (currentTime.getTime() > origTime.getTime()) {
+            await this.updateBuildStatus({
+                buildId,
+                token,
+                apiUri,
+                status: 'FROZEN',
+                statusMessage: `Blocked by freeze window, re-enqueued to ${currentTime}`
+            }).catch(() => Promise.resolve());
+
             await this.queueBreaker.runCommand('delDelayed', this.frozenBuildQueue,
                 'startFrozen', [{
                     jobId

@@ -347,7 +347,7 @@ describe('index test', () => {
             testConfig.build = buildMock;
 
             return executor.start(testConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
+                assert.calledTwice(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
                     JSON.stringify(testConfig));
                 assert.calledWith(queueMock.enqueue, 'builds', 'start',
@@ -360,7 +360,7 @@ describe('index test', () => {
         );
 
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
-            assert.calledOnce(queueMock.connect);
+            assert.calledTwice(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
                 JSON.stringify(testConfig));
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
@@ -377,7 +377,7 @@ describe('index test', () => {
         });
     });
 
-    describe('startFrozen', () => {
+    describe('_startFrozen', () => {
         it('enqueues a delayed job if in freeze window', () => {
             mockery.resetCache();
 
@@ -414,8 +414,22 @@ describe('index test', () => {
 
             sandbox.useFakeTimers(dateNow.getTime());
 
+            const options = {
+                json: true,
+                method: 'PUT',
+                uri: `http://api.com/v4/builds/${testConfig.buildId}`,
+                body: {
+                    status: 'FROZEN',
+                    statusMessage: sinon.match('Blocked by freeze window, re-enqueued to ')
+                },
+                headers: {
+                    Authorization: 'Bearer asdf',
+                    'Content-Type': 'application/json'
+                }
+            };
+
             return executor.start(testConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
+                assert.calledTwice(queueMock.connect);
                 assert.calledWith(queueMock.delDelayed, 'frozenBuilds', 'startFrozen', [{
                     jobId
                 }]);
@@ -425,6 +439,7 @@ describe('index test', () => {
                     'startFrozen', [{
                         jobId
                     }]);
+                assert.calledWith(reqMock, options);
                 sandbox.restore();
             });
         });
