@@ -318,11 +318,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startFrozen(config) {
-        config.job = {
-            name: config.jobName
+        const newConfig = {
+            job: {
+                name: config.jobName
+            }
         };
 
-        return this.postBuildEvent(config)
+        Object.assign(newConfig, config);
+
+        return this.postBuildEvent(newConfig)
             .catch(() => Promise.resolve());
     }
 
