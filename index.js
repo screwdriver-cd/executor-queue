@@ -318,6 +318,10 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startFrozen(config) {
+        config.job = {
+            name: config.jobName
+        };
+
         return this.postBuildEvent(config)
             .catch(() => Promise.resolve());
     }
@@ -350,6 +354,7 @@ class ExecutorQueue extends Executor {
      * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
+     * @param  {String} config.jobName       Name of job that this build belongs to
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {Object} config.pipeline      Pipeline of the job
      * @param  {Fn}     config.tokenGen      Function to generate JWT from username, scope and scmContext
