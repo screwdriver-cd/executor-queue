@@ -11,7 +11,8 @@ const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
 const testPipeline = require('./data/testPipeline.json');
 const testJob = require('./data/testJob.json');
-const { buildId, jobId, blockedBy } = testConfig;
+const { buildId, blockedBy } = testConfig;
+const jobId = testConfig.job.id;
 const partialTestConfig = {
     buildId,
     jobId,
@@ -347,7 +348,7 @@ describe('index test', () => {
             testConfig.build = buildMock;
 
             return executor.start(testConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
+                assert.calledOnce(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
                     JSON.stringify(testConfig));
                 assert.calledWith(queueMock.enqueue, 'builds', 'start',
@@ -360,7 +361,7 @@ describe('index test', () => {
         );
 
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
-            assert.calledTwice(queueMock.connect);
+            assert.calledOnce(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
                 JSON.stringify(testConfig));
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);

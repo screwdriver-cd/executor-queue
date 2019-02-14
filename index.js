@@ -349,7 +349,7 @@ class ExecutorQueue extends Executor {
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
      * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.apiUri        Screwdriver's API
-     * @param  {String} config.jobId         JobID that this build belongs to
+     * @param  {Object} config.job           Job that this build belongs to
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {Object} config.pipeline      Pipeline of the job
      * @param  {Fn}     config.tokenGen      Function to generate JWT from username, scope and scmContext
@@ -359,18 +359,13 @@ class ExecutorQueue extends Executor {
      */
     async _start(config) {
         await this.connect();
-        const { build, buildId, jobId, blockedBy, freezeWindows, token, apiUri } = config;
+        const { build, buildId, job, blockedBy, freezeWindows, token, apiUri } = config;
 
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
         }
 
         delete config.build;
-
-        // eslint-disable-next-line no-underscore-dangle
-        await this._stopFrozen({
-            jobId
-        });
 
         const currentTime = new Date();
         const origTime = new Date(currentTime.getTime());
@@ -380,6 +375,11 @@ class ExecutorQueue extends Executor {
         let enq;
 
         if (currentTime.getTime() > origTime.getTime()) {
+            // eslint-disable-next-line no-underscore-dangle
+            await this._stopFrozen({
+                jobId: job.id
+            });
+
             await this.updateBuildStatus({
                 buildId,
                 token,
@@ -388,17 +388,12 @@ class ExecutorQueue extends Executor {
                 statusMessage: `Blocked by freeze window, re-enqueued to ${currentTime}`
             }).catch(() => Promise.resolve());
 
-            await this.queueBreaker.runCommand('delDelayed', this.frozenBuildQueue,
-                'startFrozen', [{
-                    jobId
-                }]);
-
             await this.redisBreaker.runCommand('hset', this.frozenBuildTable,
-                jobId, JSON.stringify(config));
+                job.id, JSON.stringify(config));
 
             enq = await this.queueBreaker.runCommand('enqueueAt', currentTime.getTime(),
                 this.frozenBuildQueue, 'startFrozen', [{
-                    jobId
+                    jobId: job.id
                 }]
             );
         } else {
@@ -409,7 +404,7 @@ class ExecutorQueue extends Executor {
             // Note: arguments to enqueue are [queue name, job name, array of args]
             enq = await this.queueBreaker.runCommand('enqueue', this.buildQueue, 'start', [{
                 buildId,
-                jobId,
+                jobId: job.id,
                 blockedBy: blockedBy.toString()
             }]);
         }
