@@ -186,7 +186,7 @@ class ExecutorQueue extends Executor {
         const admin = await pipelineInstance.getFirstAdmin();
         const jwt = this.tokenGen(admin.username, {}, pipeline.scmContext);
         
-        winston.log(`posting event for pipeline ${pipeline.id} job ${job.name} using user ${admin.username}`);
+        winston.info(`posting event for pipeline ${pipeline.id} job ${job.name} using user ${admin.username}`);
 
         const options = {
             url: `${apiUri}/v4/events`,
