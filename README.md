@@ -1,4 +1,4 @@
-# Executor Queue
+# Executor Queue!
 [![Version][npm-image]][npm-url] ![Downloads][downloads-image] [![Build Status][status-image]][status-url] [![Open Issues][issues-image]][issues-url] [![Dependency Status][daviddm-image]][daviddm-url] ![License][license-image]
 
 > An executor plugin that routes builds through a Redis queue
