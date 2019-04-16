@@ -317,7 +317,7 @@ describe('index test', () => {
                 },
                 json: true,
                 body: {
-                    causeMessage: 'Started by periodic scheduler',
+                    causeMessage: 'Started by periodic build scheduler',
                     creator: { name: 'Screwdriver scheduler', username: 'sd:scheduler' },
                     pipelineId: testDelayedConfig.pipeline.id,
                     startFrom: testDelayedConfig.job.name

@@ -294,7 +294,7 @@ class ExecutorQueue extends Executor {
         }
 
         if (triggerBuild) {
-            config.causeMessage = 'Started by periodic scheduler';
+            config.causeMessage = 'Started by periodic build scheduler';
 
             return this.postBuildEvent(config)
                 .catch((err) => {
@@ -357,7 +357,7 @@ class ExecutorQueue extends Executor {
             job: {
                 name: config.jobName
             },
-            causeMessage: 'Started by frozen scheduler'
+            causeMessage: 'Started by freeze window scheduler'
         };
 
         Object.assign(newConfig, config);
