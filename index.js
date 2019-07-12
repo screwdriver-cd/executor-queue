@@ -329,20 +329,19 @@ class ExecutorQueue extends Executor {
             let shouldRetry = false;
 
             try {
-                try {
-                    await this.queue.enqueueAt(next, this.periodicBuildQueue,
-                        'startDelayed', [{ jobId: job.id }]);
-                } catch (err) {
-                    // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
-                    // eslint-disable-next-line max-len
-                    if (err && err.message !== 'Job already enqueued at this time with same arguments') {
-                        shouldRetry = true;
-                    }
+                await this.queue.enqueueAt(next, this.periodicBuildQueue,
+                    'startDelayed', [{ jobId: job.id }]);
+            } catch (err) {
+                // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
+                // eslint-disable-next-line max-len
+                if (err && err.message !== 'Job already enqueued at this time with same arguments') {
+                    shouldRetry = true;
                 }
-                if (!shouldRetry) {
-                    return Promise.resolve();
-                }
-
+            }
+            if (!shouldRetry) {
+                return Promise.resolve();
+            }
+            try {
                 await this.queueBreaker.runCommand('enqueueAt', next,
                     this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }]);
             } catch (err) {
