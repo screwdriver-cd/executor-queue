@@ -165,13 +165,9 @@ class ExecutorQueue extends Executor {
         Promise.resolve().then(this.scheduler.connect()).then(this.scheduler.start());
 
         process.on('SIGTERM', () => {
-            Promise.resolve().then(() => {
-                this.multiWorker.end();
-            }).catch((err) => {
+            this.multiWorker.end().catch((err) => {
                 winston.error(`failed to end the worker: ${err}`);
-            }).then(() => {
-                this.scheduler.end();
-            }).catch((err) => { // eslint-disable-line newline-per-chained-call
+            }).then(this.scheduler.end()).catch((err) => {
                 winston.error(`failed to end the scheduler: ${err}`);
                 process.exit(128);
             });
