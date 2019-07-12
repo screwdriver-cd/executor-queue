@@ -162,22 +162,19 @@ class ExecutorQueue extends Executor {
             winston.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
 
         this.multiWorker.start();
-        await this.scheduler.connect();
-        this.scheduler.start();
+        Promise.resolve().then(this.scheduler.connect()).then(this.scheduler.start());
 
         process.on('SIGTERM', () => {
-            try {
-                await this.multiWorker.end();
-            } catch (err) {
-                winston.error(`failed to end the worker: ${error}`);
-            }
-            try {
-                await this.scheduler.end();
-            } catch (err) {
+            Promise.resolve().then(() => {
+                this.multiWorker.end();
+            }).catch((err) => {
+                winston.error(`failed to end the worker: ${err}`);
+            }).then(() => {
+                this.scheduler.end();
+            }).catch((err) => { // eslint-disable-line newline-per-chained-call
                 winston.error(`failed to end the scheduler: ${err}`);
                 process.exit(128);
-            }
-            process.exit(0);
+            });
         });
     }
 
