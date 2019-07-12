@@ -57,7 +57,6 @@ class ExecutorQueue extends Executor {
         );
 
         // eslint-disable-next-line new-cap
-        // queue機能を使うためにqueueに代入
         this.queue = new Resque.Queue({ connection: redisConnection });
         this.queueBreaker = new Breaker((funcName, ...args) => {
             const callback = args.pop();
