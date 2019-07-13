@@ -167,7 +167,7 @@ class ExecutorQueue extends Executor {
         process.on('SIGTERM', () => {
             this.multiWorker.end().catch((err) => {
                 winston.error(`failed to end the worker: ${err}`);
-            }).then(this.scheduler.end()).catch((err) => {
+            }).then(() => this.scheduler.end()).catch((err) => {
                 winston.error(`failed to end the scheduler: ${err}`);
                 process.exit(128);
             });
