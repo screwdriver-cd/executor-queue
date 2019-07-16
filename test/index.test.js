@@ -66,12 +66,12 @@ describe('index test', () => {
         };
         multiWorker = function () {
             this.start = () => {};
-            this.end = sinon.stub();
+            this.end = sinon.stub().resolves();
         };
         scheduler = function () {
-            this.start = () => {};
-            this.connect = () => {};
-            this.end = sinon.stub();
+            this.start = sinon.stub().resolves();
+            this.connect = sinon.stub().resolves();
+            this.end = sinon.stub().resolves();
         };
         util.inherits(multiWorker, EventEmitter);
         util.inherits(scheduler, EventEmitter);
