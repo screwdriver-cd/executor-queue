@@ -162,7 +162,7 @@ class ExecutorQueue extends Executor {
             winston.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
 
         this.multiWorker.start();
-        Promise.resolve().then(this.scheduler.connect()).then(this.scheduler.start());
+        Promise.resolve().then(() => this.scheduler.connect()).then(() => this.scheduler.start());
 
         process.on('SIGTERM', () => {
             this.multiWorker.end().catch((err) => {
