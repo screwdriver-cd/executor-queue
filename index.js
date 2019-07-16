@@ -162,23 +162,14 @@ class ExecutorQueue extends Executor {
             winston.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
 
         this.multiWorker.start();
-        this.scheduler.connect(() => {
-            this.scheduler.start();
-        });
+        this.scheduler.connect().then(() => this.scheduler.start());
 
         process.on('SIGTERM', () => {
-            this.multiWorker.end((error) => {
-                if (error) {
-                    winston.error(`failed to end the worker: ${error}`);
-                }
-
-                this.scheduler.end((err) => {
-                    if (err) {
-                        winston.error(`failed to end the scheduler: ${err}`);
-                        process.exit(128);
-                    }
-                    process.exit(0);
-                });
+            this.multiWorker.end().catch((err) => {
+                winston.error(`failed to end the worker: ${err}`);
+            }).then(() => this.scheduler.end()).catch((err) => {
+                winston.error(`failed to end the scheduler: ${err}`);
+                process.exit(128);
             });
         });
     }
@@ -326,31 +317,27 @@ class ExecutorQueue extends Executor {
                 })));
 
             // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-            return new Promise((resolve) => {
-                let shouldRetry = false;
+            let shouldRetry = false;
 
-                this.queue.enqueueAt(next,
-                    this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }], (err) => {
-                        // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
-                        // eslint-disable-next-line max-len
-                        if (err && err.message !== 'Job already enqueued at this time with same arguments') {
-                            shouldRetry = true;
-                        }
-                    });
-
-                return resolve(shouldRetry);
-            }).then((shouldRetry) => {
-                if (!shouldRetry) {
-                    return Promise.resolve();
+            try {
+                await this.queue.enqueueAt(next, this.periodicBuildQueue,
+                    'startDelayed', [{ jobId: job.id }]);
+            } catch (err) {
+                // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
+                // eslint-disable-next-line max-len
+                if (err && err.message !== 'Job already enqueued at this time with same arguments') {
+                    shouldRetry = true;
                 }
-
-                return this.queueBreaker.runCommand('enqueueAt', next,
-                    this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }]);
-            }).catch((err) => {
-                winston.error(`failed to add to delayed queue for job ${job.id}: ${err}`);
-
+            }
+            if (!shouldRetry) {
                 return Promise.resolve();
-            });
+            }
+            try {
+                await this.queueBreaker.runCommand('enqueueAt', next,
+                    this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }]);
+            } catch (err) {
+                winston.error(`failed to add to delayed queue for job ${job.id}: ${err}`);
+            }
         }
 
         return Promise.resolve();
