@@ -68,17 +68,11 @@ class ExecutorQueue extends Executor {
         this.redisBreaker = new Breaker((funcName, ...args) =>
             // Use the queue's built-in connection to send redis commands instead of instantiating a new one
             this.redis[funcName](...args), breaker);
-        this.requestRetryStrategy = (err, response) => {
-            console.log('---retry strategy');
-
-            return !!err || (response.statusCode !== 201 && response.statusCode !== 200);
-        };
-        this.requestRetryStrategyPostEvent = (err, response) => {
-            console.log('--- retry');
-
-            return !!err || (response.statusCode !== 201 && response.statusCode !== 200
-              && response.statusCode !== 404); // postEvent can return 404 if no job to start
-        };
+        this.requestRetryStrategy = (err, response) =>
+            !!err || (response.statusCode !== 201 && response.statusCode !== 200);
+        this.requestRetryStrategyPostEvent = (err, response) =>
+            !!err || (response.statusCode !== 201 && response.statusCode !== 200
+            && response.statusCode !== 404); // postEvent can return 404 if no job to start
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);

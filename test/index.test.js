@@ -46,7 +46,6 @@ describe('index test', () => {
     let buildMock;
     let pipelineFactoryMock;
     let fakeResponse;
-    let fakeResponse404;
     let userTokenGen;
     let testDelayedConfig;
 
@@ -114,12 +113,6 @@ describe('index test', () => {
 
         fakeResponse = {
             statusCode: 201,
-            body: {
-                id: '12345'
-            }
-        };
-        fakeResponse404 = {
-            statusCode: 404,
             body: {
                 id: '12345'
             }
@@ -521,71 +514,6 @@ describe('index test', () => {
                         jobId
                     }]);
                 assert.calledWith(reqMock, options);
-                sandbox.restore();
-            });
-        });
-
-        it('do not retry if delayed job is disabled', () => {
-            mockery.resetCache();
-
-            const freezeWindowsMockB = {
-                timeOutOfWindows: (windows, date) => {
-                    date.setUTCMinutes(date.getUTCMinutes() + 1);
-
-                    return date;
-                }
-            };
-
-            mockery.deregisterMock('./lib/freezeWindows');
-            mockery.registerMock('./lib/freezeWindows', freezeWindowsMockB);
-
-            /* eslint-disable global-require */
-            Executor = require('../index');
-            /* eslint-enable global-require */
-
-            executor = new Executor({
-                redisConnection: testConnection,
-                breaker: {
-                    retry: {
-                        retries: 1
-                    }
-                },
-                pipelineFactory: pipelineFactoryMock
-            });
-
-            executor.userTokenGen = userTokenGen;
-
-            const dateNow = new Date();
-
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            sandbox.useFakeTimers(dateNow.getTime());
-
-            const optionsPost = {
-                url: 'http://localhost/v4/events',
-                method: 'POST',
-                headers: {
-                    Authorization: 'Bearer admintoken',
-                    'Content-Type': 'application/json'
-                },
-                json: true,
-                body: {
-                    causeMessage: 'Started by freeze window scheduler',
-                    creator: { name: 'Screwdriver scheduler', username: 'sd:scheduler' },
-                    pipelineId: testDelayedConfig.pipeline.id,
-                    startFrom: testDelayedConfig.job.name
-                },
-                maxAttempts: 3,
-                retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategyPostEvent
-            };
-
-            reqMock.yieldsAsync(null, fakeResponse404, fakeResponse404.body);
-
-            return executor.startFrozen(testDelayedConfig).then(() => {
-                assert.calledWith(reqMock, optionsPost);
                 sandbox.restore();
             });
         });
