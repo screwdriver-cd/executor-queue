@@ -70,7 +70,9 @@ class ExecutorQueue extends Executor {
             this.redis[funcName](...args), breaker);
         this.requestRetryStrategy = (err, response) =>
             !!err || (response.statusCode !== 201 && response.statusCode !== 200);
-
+        this.requestRetryStrategyPostEvent = (err, response) =>
+            !!err || (response.statusCode !== 201 && response.statusCode !== 200
+            && response.statusCode !== 404); // postEvent can return 404 if no job to start
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
@@ -210,7 +212,7 @@ class ExecutorQueue extends Executor {
             },
             maxAttempts: RETRY_LIMIT,
             retryDelay: RETRY_DELAY * 1000, // in ms
-            retryStrategy: this.requestRetryStrategy
+            retryStrategy: this.requestRetryStrategyPostEvent
         };
 
         if (eventId) {

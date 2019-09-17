@@ -337,7 +337,7 @@ describe('index test', () => {
                 },
                 maxAttempts: 3,
                 retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategy
+                retryStrategy: executor.requestRetryStrategyPostEvent
             };
 
             return executor.startPeriodic(testDelayedConfig).then(() => {
@@ -375,7 +375,7 @@ describe('index test', () => {
                 },
                 maxAttempts: 3,
                 retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategy
+                retryStrategy: executor.requestRetryStrategyPostEvent
             };
 
             return executor.startPeriodic(testDelayedConfig).then(() => {
