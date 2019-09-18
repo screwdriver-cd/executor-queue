@@ -186,14 +186,21 @@ class ExecutorQueue extends Executor {
      * @param {String} config.apiUri    Base URL of the Screwdriver API
      * @return {Promise}
      */
-    async postBuildEvent({ pipeline, job, apiUri, eventId, causeMessage }) {
+    async postBuildEvent({ pipeline, job, apiUri, eventId, causeMessage, frozenFlag }) {
         const pipelineInstance = await this.pipelineFactory.get(pipeline.id);
         const admin = await pipelineInstance.getFirstAdmin();
         const jwt = this.userTokenGen(admin.username, {}, pipeline.scmContext);
-
-        winston.info(`POST event for pipeline ${pipeline.id}:${job.name}` +
-            `using user ${admin.username}`);
-        const options = {
+        const getOptions = {
+            url: `${apiUri}/v4/jobs/${job.id}`,
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${jwt}`
+            },
+            maxAttempts: RETRY_LIMIT,
+            retryDelay: RETRY_DELAY * 1000, // in ms
+            retryStrategy: this.requestRetryStrategy
+        };
+        const postOptions = {
             url: `${apiUri}/v4/events`,
             method: 'POST',
             headers: {
@@ -216,20 +223,38 @@ class ExecutorQueue extends Executor {
         };
 
         if (eventId) {
-            options.body.parentEventId = eventId;
+            postOptions.body.parentEventId = eventId;
         }
 
-        return new Promise((resolve, reject) => {
-            requestretry(options, (err, response) => {
+        winston.info(`POST event for pipeline ${pipeline.id}:${job.name}` +
+            `using user ${admin.username}`);
+
+        return new Promise((resolve) => {
+            // for periodic build, no need to make this call
+            if (!frozenFlag) return resolve(true);
+
+            return requestretry(getOptions, (err, response) => {
+                if (!err && response.statusCode === 200) {
+                    return resolve(response.body.state === 'ENABLED' && !response.body.archive);
+                }
+
+                return resolve(false);
+            });
+        }).then((enabled) => {
+            if (!enabled) {
+                return Promise.reject('No job to start');
+            }
+
+            return requestretry(postOptions, (err, response) => {
                 if (!err && response.statusCode === 201) {
-                    return resolve(response);
+                    return Promise.resolve(response);
                 }
 
                 if (response.statusCode !== 201) {
-                    return reject(JSON.stringify(response.body));
+                    return Promise.reject(JSON.stringify(response.body));
                 }
 
-                return reject(err);
+                return Promise.reject(err);
             });
         });
     }
@@ -371,8 +396,10 @@ class ExecutorQueue extends Executor {
     async _startFrozen(config) {
         const newConfig = {
             job: {
-                name: config.jobName
+                name: config.jobName,
+                id: config.jobId
             },
+            frozenFlag: true,
             causeMessage: 'Started by freeze window scheduler'
         };
 
@@ -380,7 +407,7 @@ class ExecutorQueue extends Executor {
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                winston.err(`failed to post build event for job ${config.jobId}: ${err}`);
+                winston.error(`failed to post build event for job ${config.jobId}: ${err}`);
 
                 return Promise.resolve();
             });

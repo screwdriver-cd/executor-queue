@@ -46,6 +46,7 @@ describe('index test', () => {
     let buildMock;
     let pipelineFactoryMock;
     let fakeResponse;
+    let fakeGetResponse;
     let userTokenGen;
     let testDelayedConfig;
 
@@ -110,7 +111,14 @@ describe('index test', () => {
         freezeWindowsMock = {
             timeOutOfWindows: (windows, date) => date
         };
-
+        fakeGetResponse = {
+            statusCode: 200,
+            body: {
+                id: '1763',
+                state: 'ENABLED',
+                archived: false
+            }
+        };
         fakeResponse = {
             statusCode: 201,
             body: {
@@ -515,6 +523,49 @@ describe('index test', () => {
                     }]);
                 assert.calledWith(reqMock, options);
                 sandbox.restore();
+            });
+        });
+
+        it('do not post event if job is disabled', () => {
+            reqMock.onCall(0).yieldsAsync(null, fakeGetResponse, fakeGetResponse.body);
+            reqMock.onCall(1).yieldsAsync(null, fakeResponse, fakeResponse.body);
+            testDelayedConfig.frozenFlag = true;
+            executor.userTokenGen = userTokenGen;
+
+            const getOptions = {
+                url: 'http://localhost/v4/jobs/1234',
+                method: 'GET',
+                headers: {
+                    Authorization: 'Bearer admintoken'
+                },
+                maxAttempts: 3,
+                retryDelay: 5000,
+                retryStrategy: executor.requestRetryStrategy
+            };
+
+            const options = {
+                url: 'http://localhost/v4/events',
+                method: 'POST',
+                headers: {
+                    Authorization: 'Bearer admintoken',
+                    'Content-Type': 'application/json'
+                },
+                json: true,
+                body: {
+                    causeMessage: 'Started by freeze window scheduler',
+                    creator: { name: 'Screwdriver scheduler', username: 'sd:scheduler' },
+                    pipelineId: testDelayedConfig.pipeline.id,
+                    startFrom: testDelayedConfig.job.name
+                },
+                maxAttempts: 3,
+                retryDelay: 5000,
+                retryStrategy: executor.requestRetryStrategyPostEvent
+            };
+
+            return executor.startFrozen(testDelayedConfig).then(() => {
+                assert.calledTwice(reqMock);
+                assert.calledWith(reqMock.firstCall, getOptions);
+                assert.calledWith(reqMock.secondCall, options);
             });
         });
     });
