@@ -415,6 +415,8 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
      * @param  {String} config.jobName       Name of job that this build belongs to
+     * @param  {String} config.jobState      ENABLED/DISABLED
+     * @param  {String} config.jobArchived   Boolean value of whether job is archived
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {Object} config.pipeline      Pipeline of the job
      * @param  {Fn}     config.tokenGen      Function to generate JWT from username, scope and scmContext
@@ -424,7 +426,9 @@ class ExecutorQueue extends Executor {
      */
     async _start(config) {
         await this.connect();
-        const { build, buildId, jobId, blockedBy, freezeWindows, token, apiUri } = config;
+        const {
+            build, buildId, jobId, jobState, jobArchived, blockedBy, freezeWindows, token, apiUri
+        } = config;
 
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
@@ -436,6 +440,12 @@ class ExecutorQueue extends Executor {
         await this._stopFrozen({
             jobId
         });
+
+        // Skip if job is disabled or archived
+        // Check if jobState & jobArchived exist first, for backward compatibility, TODO: remove later
+        if ((jobState && jobState !== 'ENABLED') || (jobArchived && jobArchived === true)) {
+            return Promise.resolve();
+        }
 
         const currentTime = new Date();
         const origTime = new Date(currentTime.getTime());

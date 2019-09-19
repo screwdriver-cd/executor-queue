@@ -4,6 +4,8 @@
   },
   "jobId": 777,
   "jobName": "main",
+  "jobState": "ENABLED",
+  "jobArchived": false,
   "buildId": 8609,
   "container": "node:4",
   "apiUri": "http://api.com",
