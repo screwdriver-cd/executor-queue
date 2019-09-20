@@ -442,10 +442,12 @@ class ExecutorQueue extends Executor {
         });
 
         // Skip if job is disabled or archived
-        // Check if jobState & jobArchived exist first, for backward compatibility, TODO: remove later
-        if ((jobState && jobState !== 'ENABLED') || (jobArchived && jobArchived === true)) {
+
+        if (jobState === 'DISABLED' || jobArchived === true) {
             return Promise.resolve();
         }
+        delete config.jobState;
+        delete config.jobArchived;
 
         const currentTime = new Date();
         const origTime = new Date(currentTime.getTime());
