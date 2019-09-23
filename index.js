@@ -376,11 +376,17 @@ class ExecutorQueue extends Executor {
             causeMessage: 'Started by freeze window scheduler'
         };
 
+        if (config.jobState === 'DISABLED' || config.jobArchived === true) {
+            winston.error(`job ${config.jobName} is disabled or archived`);
+
+            return Promise.resolve();
+        }
+
         Object.assign(newConfig, config);
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                winston.err(`failed to post build event for job ${config.jobId}: ${err}`);
+                winston.error(`failed to post build event for job ${config.jobId}: ${err}`);
 
                 return Promise.resolve();
             });
@@ -446,8 +452,6 @@ class ExecutorQueue extends Executor {
         if (jobState === 'DISABLED' || jobArchived === true) {
             return Promise.resolve();
         }
-        delete config.jobState;
-        delete config.jobArchived;
 
         const currentTime = new Date();
         const origTime = new Date(currentTime.getTime());
