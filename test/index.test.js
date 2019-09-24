@@ -22,11 +22,6 @@ const partialTestConfigToString = Object.assign({}, partialTestConfig, {
 const testAdmin = {
     username: 'admin'
 };
-const buildTestConfig = Object.assign({}, testConfig);
-
-delete buildTestConfig.jobState;
-delete buildTestConfig.jobArchived;
-
 const EventEmitter = require('events').EventEmitter;
 
 sinon.assert.expose(chai.assert, { prefix: '' });
@@ -423,7 +418,7 @@ describe('index test', () => {
             return executor.start(testConfig).then(() => {
                 assert.calledTwice(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                    JSON.stringify(buildTestConfig));
+                    JSON.stringify(testConfig));
                 assert.calledWith(queueMock.enqueue, 'builds', 'start',
                     [partialTestConfigToString]);
                 assert.calledOnce(buildMock.update);
@@ -436,7 +431,7 @@ describe('index test', () => {
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
             assert.calledTwice(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                JSON.stringify(buildTestConfig));
+                JSON.stringify(testConfig));
             assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
         }));
 
