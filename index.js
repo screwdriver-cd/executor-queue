@@ -417,6 +417,7 @@ class ExecutorQueue extends Executor {
      * @param  {Number} [config.eventId]     Optional eventID that this build belongs to
      * @param  {String} config.build         Build object
      * @param  {Array}  config.blockedBy     Array of job IDs that this job is blocked by. Always blockedby itself
+     * @param  {String} config.causeMessage  Reason the event is run
      * @param  {Array}  config.freezeWindows Array of cron expressions that this job cannot run during
      * @param  {String} config.apiUri        Screwdriver's API
      * @param  {String} config.jobId         JobID that this build belongs to
@@ -433,14 +434,25 @@ class ExecutorQueue extends Executor {
     async _start(config) {
         await this.connect();
         const {
-            build, buildId, jobId, jobState, jobArchived, blockedBy, freezeWindows, token, apiUri
+            build,
+            buildId,
+            causeMessage,
+            jobId,
+            jobState,
+            jobArchived,
+            blockedBy,
+            freezeWindows,
+            token,
+            apiUri
         } = config;
+        const forceStart = /\[(force start)\]/.test(causeMessage);
 
         if (!this.tokenGen) {
             this.tokenGen = config.tokenGen;
         }
 
         delete config.build;
+        delete config.causeMessage;
 
         // eslint-disable-next-line no-underscore-dangle
         await this._stopFrozen({
@@ -448,7 +460,6 @@ class ExecutorQueue extends Executor {
         });
 
         // Skip if job is disabled or archived
-
         if (jobState === 'DISABLED' || jobArchived === true) {
             return Promise.resolve();
         }
@@ -460,7 +471,8 @@ class ExecutorQueue extends Executor {
 
         let enq;
 
-        if (currentTime.getTime() > origTime.getTime()) {
+        // Check freeze window
+        if (currentTime.getTime() > origTime.getTime() && !forceStart) {
             await this.updateBuildStatus({
                 buildId,
                 token,
@@ -473,6 +485,7 @@ class ExecutorQueue extends Executor {
                 return Promise.resolve();
             });
 
+            // Remove old job from queue to collapse builds
             await this.queueBreaker.runCommand('delDelayed', this.frozenBuildQueue,
                 'startFrozen', [{
                     jobId
@@ -481,6 +494,7 @@ class ExecutorQueue extends Executor {
             await this.redisBreaker.runCommand('hset', this.frozenBuildTable,
                 jobId, JSON.stringify(config));
 
+            // Add new job back to queue
             enq = await this.queueBreaker.runCommand('enqueueAt', currentTime.getTime(),
                 this.frozenBuildQueue, 'startFrozen', [{
                     jobId
