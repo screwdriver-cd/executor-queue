@@ -428,6 +428,31 @@ describe('index test', () => {
         }
         );
 
+        it('enqueues a build and when force start is on', () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            sandbox.useFakeTimers(dateNow);
+            buildMock.stats = {};
+            testConfig.build = buildMock;
+            testConfig.causeMessage = '[force start] Need to push hotfix';
+
+            return executor.start(testConfig).then(() => {
+                assert.calledTwice(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
+                    JSON.stringify(testConfig));
+                assert.calledWith(queueMock.enqueue, 'builds', 'start',
+                    [partialTestConfigToString]);
+                assert.calledOnce(buildMock.update);
+                assert.equal(buildMock.stats.queueEnterTime, isoTime);
+                sandbox.restore();
+            });
+        }
+        );
+
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
             assert.calledTwice(queueMock.connect);
             assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
