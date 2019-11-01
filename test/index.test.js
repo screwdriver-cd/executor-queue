@@ -18,7 +18,8 @@ const partialTestConfig = {
     blockedBy
 };
 const partialTestConfigToString = Object.assign({}, partialTestConfig, {
-    blockedBy: blockedBy.toString() });
+    blockedBy: blockedBy.toString()
+});
 const testAdmin = {
     username: 'admin'
 };
@@ -64,7 +65,7 @@ describe('index test', () => {
             tokenGen: userTokenGen
         };
         multiWorker = function () {
-            this.start = () => {};
+            this.start = () => { };
             this.end = sinon.stub().resolves();
         };
         scheduler = function () {
@@ -82,7 +83,8 @@ describe('index test', () => {
             delDelayed: sinon.stub().resolves(1),
             connection: {
                 connected: false
-            }
+            },
+            end: sinon.stub().resolves()
         };
         resqueMock = {
             Queue: sinon.stub().returns(queueMock),
@@ -581,7 +583,8 @@ describe('index test', () => {
         it('adds a stop event to the queue if it has no blocked job', () => {
             queueMock.del.resolves(0);
             const partialTestConfigUndefined = Object.assign({}, partialTestConfig, {
-                blockedBy: undefined });
+                blockedBy: undefined
+            });
             const stopConfig = Object.assign({ started: true }, partialTestConfigUndefined);
 
             return executor.stop(partialTestConfigUndefined).then(() => {
@@ -594,11 +597,23 @@ describe('index test', () => {
         it('doesn\'t call connect if there\'s already a connection', () => {
             queueMock.connection.connected = true;
 
-            return executor.stop(Object.assign({}, partialTestConfig, { annotations: {
-                'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
-            } })).then(() => {
+            return executor.stop(Object.assign({}, partialTestConfig, {
+                annotations: {
+                    'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
+                }
+            })).then(() => {
                 assert.notCalled(queueMock.connect);
                 assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
+            });
+        });
+    });
+
+    describe('cleanUp', () => {
+        it('worker.end() is called', () => {
+            executor.cleanUp().then(() => {
+                assert.calledWith(spyMultiWorker);
+                assert.calledWith(spyScheduler);
+                assert.calledWith(queueMock.end);
             });
         });
     });
