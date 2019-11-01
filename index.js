@@ -72,7 +72,7 @@ class ExecutorQueue extends Executor {
             !!err || (response.statusCode !== 201 && response.statusCode !== 200);
         this.requestRetryStrategyPostEvent = (err, response) =>
             !!err || (response.statusCode !== 201 && response.statusCode !== 200
-            && response.statusCode !== 404); // postEvent can return 404 if no job to start
+                && response.statusCode !== 404); // postEvent can return 404 if no job to start
         this.fuseBox = new FuseBox();
         this.fuseBox.addFuse(this.queueBreaker);
         this.fuseBox.addFuse(this.redisBreaker);
@@ -88,29 +88,33 @@ class ExecutorQueue extends Executor {
         };
         // Jobs object to register the worker with
         const jobs = {
-            startDelayed: Object.assign({ perform: async (jobConfig) => {
-                try {
-                    const fullConfig = await this.redisBreaker
-                        .runCommand('hget', this.periodicBuildTable, jobConfig.jobId);
+            startDelayed: Object.assign({
+                perform: async (jobConfig) => {
+                    try {
+                        const fullConfig = await this.redisBreaker
+                            .runCommand('hget', this.periodicBuildTable, jobConfig.jobId);
 
-                    return await this.startPeriodic(
-                        Object.assign(JSON.parse(fullConfig), { triggerBuild: true }));
-                } catch (err) {
-                    winston.error('err in startDelayed job: ', err);
-                    throw err;
+                        return await this.startPeriodic(
+                            Object.assign(JSON.parse(fullConfig), { triggerBuild: true }));
+                    } catch (err) {
+                        winston.error('err in startDelayed job: ', err);
+                        throw err;
+                    }
                 }
-            } }, retryOptions),
-            startFrozen: Object.assign({ perform: async (jobConfig) => {
-                try {
-                    const fullConfig = await this.redisBreaker
-                        .runCommand('hget', this.frozenBuildTable, jobConfig.jobId);
+            }, retryOptions),
+            startFrozen: Object.assign({
+                perform: async (jobConfig) => {
+                    try {
+                        const fullConfig = await this.redisBreaker
+                            .runCommand('hget', this.frozenBuildTable, jobConfig.jobId);
 
-                    return await this.startFrozen(JSON.parse(fullConfig));
-                } catch (err) {
-                    winston.error('err in startFrozen job: ', err);
-                    throw err;
+                        return await this.startFrozen(JSON.parse(fullConfig));
+                    } catch (err) {
+                        winston.error('err in startFrozen job: ', err);
+                        throw err;
+                    }
                 }
-            } }, retryOptions)
+            }, retryOptions)
         };
 
         // eslint-disable-next-line new-cap
@@ -165,15 +169,19 @@ class ExecutorQueue extends Executor {
 
         this.multiWorker.start();
         this.scheduler.connect().then(() => this.scheduler.start());
+    }
 
-        process.on('SIGTERM', () => {
-            this.multiWorker.end().catch((err) => {
-                winston.error(`failed to end the worker: ${err}`);
-            }).then(() => this.scheduler.end()).catch((err) => {
-                winston.error(`failed to end the scheduler: ${err}`);
-                process.exit(128);
-            });
-        });
+    /**
+     * Cleanup any reladed processing
+     */
+    async cleanUp() {
+        try {
+            await this.multiWorker.end();
+            await this.scheduler.end();
+            await this.queue.end();
+        } catch (err) {
+            winston.error(`failed to end executor queue: ${err}`);
+        }
     }
 
     /**
