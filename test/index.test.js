@@ -83,8 +83,7 @@ describe('index test', () => {
             delDelayed: sinon.stub().resolves(1),
             connection: {
                 connected: false
-            },
-            end: sinon.stub().resolves()
+            }
         };
         resqueMock = {
             Queue: sinon.stub().returns(queueMock),
@@ -604,16 +603,6 @@ describe('index test', () => {
             })).then(() => {
                 assert.notCalled(queueMock.connect);
                 assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
-            });
-        });
-    });
-
-    describe('cleanUp', () => {
-        it('worker.end() is called', () => {
-            executor.cleanUp().then(() => {
-                assert.calledWith(spyMultiWorker);
-                assert.calledWith(spyScheduler);
-                assert.calledWith(queueMock.end);
             });
         });
     });
