@@ -611,9 +611,9 @@ describe('index test', () => {
     describe('cleanUp', () => {
         it('worker.end() is called', () => {
             executor.cleanUp().then(() => {
-                assert.calledWith(spyMultiWorker);
-                assert.calledWith(spyScheduler);
-                assert.calledWith(queueMock.end);
+                assert.called(spyMultiWorker);
+                assert.called(spyScheduler);
+                assert.called(queueMock.end);
             });
         });
     });
