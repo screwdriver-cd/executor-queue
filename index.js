@@ -169,15 +169,19 @@ class ExecutorQueue extends Executor {
 
         this.multiWorker.start();
         this.scheduler.connect().then(() => this.scheduler.start());
+    }
 
-        process.on('SIGTERM', () => {
-            this.multiWorker.end().catch((err) => {
-                winston.error(`failed to end the worker: ${err}`);
-            }).then(() => this.scheduler.end()).catch((err) => {
-                winston.error(`failed to end the scheduler: ${err}`);
-                process.exit(128);
-            });
-        });
+    /**
+     * Cleanup any reladed processing
+     */
+    async cleanUp() {
+        try {
+            await this.multiWorker.end();
+            await this.scheduler.end();
+            await this.queue.end();
+        } catch (err) {
+            winston.error(`failed to end executor queue: ${err}`);
+        }
     }
 
     /**
