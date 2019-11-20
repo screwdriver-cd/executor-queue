@@ -135,7 +135,12 @@ describe('index test', () => {
         mockery.registerMock('ioredis', redisConstructorMock);
         mockery.registerMock('./lib/cron', cronMock);
         mockery.registerMock('./lib/freezeWindows', freezeWindowsMock);
-        mockery.registerMock('winston', winstonMock);
+        mockery.registerMock('winston', {
+            createLogger: () => winstonMock,
+            transports: {
+                Console: sinon.stub()
+            }
+        });
         mockery.registerMock('requestretry', reqMock);
 
         /* eslint-disable global-require */
