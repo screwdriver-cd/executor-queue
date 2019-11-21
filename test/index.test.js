@@ -40,7 +40,6 @@ describe('index test', () => {
     let redisConstructorMock;
     let cronMock;
     let freezeWindowsMock;
-    let winstonMock;
     let reqMock;
     let pipelineMock;
     let buildMock;
@@ -93,10 +92,6 @@ describe('index test', () => {
         };
         spyMultiWorker = sinon.spy(resqueMock, 'MultiWorker');
         spyScheduler = sinon.spy(resqueMock, 'Scheduler');
-        winstonMock = {
-            info: sinon.stub(),
-            error: sinon.stub()
-        };
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
             hset: sinon.stub().yieldsAsync(),
@@ -135,12 +130,6 @@ describe('index test', () => {
         mockery.registerMock('ioredis', redisConstructorMock);
         mockery.registerMock('./lib/cron', cronMock);
         mockery.registerMock('./lib/freezeWindows', freezeWindowsMock);
-        mockery.registerMock('winston', {
-            createLogger: () => winstonMock,
-            transports: {
-                Console: sinon.stub()
-            }
-        });
         mockery.registerMock('requestretry', reqMock);
 
         /* eslint-disable global-require */

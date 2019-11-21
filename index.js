@@ -1,12 +1,12 @@
 'use strict';
 
 const Executor = require('screwdriver-executor-base');
+const logger = require('screwdriver-logger');
 const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const requestretry = require('requestretry');
 const hoek = require('hoek');
-const winston = require('winston');
 const cron = require('./lib/cron');
 const timeOutOfWindows = require('./lib/freezeWindows').timeOutOfWindows;
 const Breaker = fuses.breaker;
@@ -14,12 +14,6 @@ const FuseBox = fuses.box;
 const EXPIRE_TIME = 1800; // 30 mins
 const RETRY_LIMIT = 3;
 const RETRY_DELAY = 5;
-const logger = winston.createLogger({
-    level: process.env.LOG_LEVEL || 'info',
-    transports: [
-        new (winston.transports.Console)({ timestamp: true })
-    ]
-});
 
 class ExecutorQueue extends Executor {
     /**
