@@ -509,6 +509,8 @@ class ExecutorQueue extends Executor {
                 }]
             );
         } else {
+            // set the start time in the queue
+            Object.assign(config, { enqueueTime: new Date() });
             // Store the config in redis
             await this.redisBreaker.runCommand('hset', this.buildConfigTable,
                 buildId, JSON.stringify(config));

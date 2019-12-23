@@ -446,8 +446,21 @@ describe('index test', () => {
                 assert.equal(buildMock.stats.queueEnterTime, isoTime);
                 sandbox.restore();
             });
-        }
-        );
+        });
+
+        it('enqueues a build and with enqueueTime', () => {
+            buildMock.stats = {};
+            testConfig.build = buildMock;
+            const config = Object.assign({}, testConfig, { enqueueTime: new Date() });
+
+            return executor.start(config).then(() => {
+                assert.calledTwice(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
+                    JSON.stringify(config));
+                assert.calledWith(queueMock.enqueue, 'builds', 'start',
+                    [partialTestConfigToString]);
+            });
+        });
 
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
             assert.calledTwice(queueMock.connect);
