@@ -479,7 +479,6 @@ class ExecutorQueue extends Executor {
             const data = await this.redisBreaker.runCommand('hget', this.timeoutQueue,
                 config.buildId);
 
-            console.log(data);
             if (!data) {
                 return Promise.resolve();
             }

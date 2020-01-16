@@ -670,12 +670,11 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            redisMock.hget.withArgs('timeoutConfigs', buildId)
-                .resolves(JSON.stringify({
-                    jobId,
-                    startTime: isoTime,
-                    timeout: 90
-                }));
+            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync(null, {
+                buildId,
+                jobId,
+                startTime: isoTime
+            });
 
             await executor.stopTimer(timerConfig);
 
@@ -686,7 +685,7 @@ describe('index test', () => {
 
         it('hdel is not called if buildId does not exist in cache', async () => {
             redisMock.hget.withArgs('timeoutConfigs', buildId)
-                .resolves(null);
+                .yieldsAsync(null, null);
 
             await executor.stopTimer(testConfig);
             assert.calledOnce(queueMock.connect);
@@ -719,8 +718,7 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            redisMock.hget.resolves(null);
-
+            redisMock.hget.yieldsAsync(null, null);
             await executor.startTimer(timerConfig);
             assert.calledOnce(queueMock.connect);
             assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
@@ -747,7 +745,7 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            redisMock.hget.resolves(null);
+            redisMock.hget.yieldsAsync(null, null);
 
             await executor.startTimer(timerConfig);
             assert.calledOnce(queueMock.connect);
@@ -770,12 +768,11 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            redisMock.hget.withArgs('timeoutConfigs', buildId)
-                .resolves(JSON.stringify({
-                    jobId,
-                    startTime: isoTime,
-                    timeout: 90
-                }));
+            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync({
+                jobId,
+                startTime: isoTime,
+                timeout: 90
+            });
 
             await executor.startTimer(timerConfig);
             assert.calledOnce(queueMock.connect);
@@ -802,8 +799,7 @@ describe('index test', () => {
                 };
 
                 sandbox.useFakeTimers(dateNow);
-                redisMock.hget.resolves(null);
-
+                redisMock.hget.yieldsAsync(null, null);
                 await executor.startTimer(timerConfig);
                 assert.calledOnce(queueMock.connect);
                 assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
