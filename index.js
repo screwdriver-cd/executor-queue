@@ -14,6 +14,7 @@ const FuseBox = fuses.box;
 const EXPIRE_TIME = 1800; // 30 mins
 const RETRY_LIMIT = 3;
 const RETRY_DELAY = 5;
+const DEFAULT_BUILD_TIMEOUT = 90;
 
 class ExecutorQueue extends Executor {
     /**
@@ -47,6 +48,7 @@ class ExecutorQueue extends Executor {
         this.tokenGen = null;
         this.userTokenGen = null;
         this.pipelineFactory = config.pipelineFactory;
+        this.timeoutQueue = `${this.prefix}timeoutConfigs`;
 
         const redisConnection = Object.assign({}, config.redisConnection, { pkg: 'ioredis' });
 
@@ -415,6 +417,78 @@ class ExecutorQueue extends Executor {
         }]);
 
         return this.redisBreaker.runCommand('hdel', this.frozenBuildTable, config.jobId);
+    }
+
+    /**
+     * Adds start time of a build to timeout queue
+     * @method status
+     * @param  {Object} config               Configuration
+     * @param  {String} config.buildId       Unique ID for a build
+     * @param  {String} config.startTime     Start time fo build
+     * @param  {String} config.buildStatus     Status of build
+     * @return {Promise}
+     */
+    async _startTimer(config) {
+        try {
+            await this.connect();
+            const {
+                buildId,
+                jobId,
+                buildStatus,
+                startTime
+            } = config;
+
+            if (buildStatus === 'RUNNING') {
+                const buildTimeout = hoek.reach(config, 'annotations>screwdriver.cd/timeout',
+                    { separator: '>' });
+                const timeout = parseInt(buildTimeout || DEFAULT_BUILD_TIMEOUT, 10);
+
+                const data = await this.redisBreaker.runCommand('hget', this.timeoutQueue, buildId);
+
+                if (data) {
+                    return Promise.resolve();
+                }
+
+                return await this.redisBreaker.runCommand('hset', this.timeoutQueue, buildId,
+                    JSON.stringify({
+                        jobId,
+                        startTime,
+                        timeout
+                    }));
+            }
+
+            return Promise.resolve();
+        } catch (err) {
+            logger.error(`Error occurred while saving to timeout queue ${err}`);
+
+            return Promise.resolve();
+        }
+    }
+
+    /**
+     * Removes start time info key from timeout queue
+     * @method status
+     * @param  {Object} config               Configuration
+     * @param  {String} config.buildId       Unique ID for a build
+     * @return {Promise}
+     */
+    async _stopTimer(config) {
+        try {
+            await this.connect();
+
+            const data = await this.redisBreaker.runCommand('hget', this.timeoutQueue,
+                config.buildId);
+
+            if (!data) {
+                return Promise.resolve();
+            }
+
+            return await this.redisBreaker.runCommand('hdel', this.timeoutQueue, config.buildId);
+        } catch (err) {
+            logger.error(`Error occurred while removing from timeout queue ${err}`);
+
+            return Promise.resolve();
+        }
     }
 
     /**

@@ -96,7 +96,8 @@ describe('index test', () => {
             hdel: sinon.stub().yieldsAsync(),
             hset: sinon.stub().yieldsAsync(),
             set: sinon.stub().yieldsAsync(),
-            expire: sinon.stub().yieldsAsync()
+            expire: sinon.stub().yieldsAsync(),
+            hget: sinon.stub().yieldsAsync()
         };
         redisConstructorMock = sinon.stub().returns(redisMock);
         cronMock = {
@@ -462,12 +463,14 @@ describe('index test', () => {
             });
         });
 
-        it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
-            assert.calledTwice(queueMock.connect);
-            assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                JSON.stringify(testConfig));
-            assert.calledWith(queueMock.enqueue, 'builds', 'start', [partialTestConfigToString]);
-        }));
+        it('enqueues a build and caches the config', () =>
+            executor.start(testConfig).then(() => {
+                assert.calledTwice(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
+                    JSON.stringify(testConfig));
+                assert.calledWith(queueMock.enqueue, 'builds', 'start',
+                    [partialTestConfigToString]);
+            }));
 
         it('doesn\'t call connect if there\'s already a connection', () => {
             queueMock.connection.connected = true;
@@ -641,5 +644,171 @@ describe('index test', () => {
                 }
             });
         });
+    });
+
+    describe('_stopTimer', () => {
+        it('does not reject if it can\'t establish a connection', async () => {
+            queueMock.connect.rejects(new Error('couldn\'t connect'));
+            try {
+                await executor.stopTimer({});
+            } catch (err) {
+                assert.fail('Should not get here');
+            }
+        });
+
+        it('removes a key from redis for the specified buildId if it exists', async () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId,
+                jobId,
+                startTime: isoTime
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync(null, {
+                buildId,
+                jobId,
+                startTime: isoTime
+            });
+
+            await executor.stopTimer(timerConfig);
+
+            assert.calledOnce(queueMock.connect);
+            assert.calledWith(redisMock.hdel, 'timeoutConfigs', buildId);
+            sandbox.restore();
+        });
+
+        it('hdel is not called if buildId does not exist in cache', async () => {
+            redisMock.hget.withArgs('timeoutConfigs', buildId)
+                .yieldsAsync(null, null);
+
+            await executor.stopTimer(testConfig);
+            assert.calledOnce(queueMock.connect);
+            assert.notCalled(redisMock.hdel);
+        });
+    });
+
+    describe('_startTimer', () => {
+        it('does not reject if it can\'t establish a connection', async () => {
+            queueMock.connect.rejects(new Error('couldn\'t connect'));
+            try {
+                await executor.startTimer({});
+            } catch (err) {
+                assert.fail('Should not get here');
+            }
+        });
+
+        it('adds a timeout key if status is RUNNING and caches the config', async () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId,
+                jobId,
+                buildStatus: 'RUNNING',
+                startTime: isoTime
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            redisMock.hget.yieldsAsync(null, null);
+            await executor.startTimer(timerConfig);
+            assert.calledOnce(queueMock.connect);
+            assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
+                JSON.stringify({
+                    jobId,
+                    startTime: isoTime,
+                    timeout: 90
+                }));
+            sandbox.restore();
+        });
+
+        it('does not add a timeout key if status is !RUNNING', async () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId,
+                jobId,
+                buildStatus: 'QUEUED',
+                startTime: isoTime
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            redisMock.hget.yieldsAsync(null, null);
+
+            await executor.startTimer(timerConfig);
+            assert.calledOnce(queueMock.connect);
+            assert.notCalled(redisMock.hset);
+            sandbox.restore();
+        });
+
+        it('does not add a timeout key if buildId already exists', async () => {
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId,
+                jobId,
+                buildStatus: 'QUEUED',
+                startTime: isoTime
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync({
+                jobId,
+                startTime: isoTime,
+                timeout: 90
+            });
+
+            await executor.startTimer(timerConfig);
+            assert.calledOnce(queueMock.connect);
+            assert.notCalled(redisMock.hset);
+            sandbox.restore();
+        });
+
+        it('adds a timeout config with specific timeout when annotations present',
+            async () => {
+                const dateNow = Date.now();
+                const isoTime = (new Date(dateNow)).toISOString();
+                const sandbox = sinon.sandbox.create({
+                    useFakeTimers: false
+                });
+
+                const timerConfig = {
+                    buildId,
+                    jobId,
+                    buildStatus: 'RUNNING',
+                    startTime: isoTime,
+                    annotations: {
+                        'screwdriver.cd/timeout': 5
+                    }
+                };
+
+                sandbox.useFakeTimers(dateNow);
+                redisMock.hget.yieldsAsync(null, null);
+                await executor.startTimer(timerConfig);
+                assert.calledOnce(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
+                    JSON.stringify({
+                        jobId,
+                        startTime: isoTime,
+                        timeout: 5
+                    }));
+                sandbox.restore();
+            });
     });
 });
