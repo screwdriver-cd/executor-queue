@@ -421,7 +421,12 @@ class ExecutorQueue extends Executor {
 
     /**
      * Adds start time of a build to timeout queue
-     * @param {Object} config
+     * @method status
+     * @param  {Object} config               Configuration
+     * @param  {String} config.buildId       Unique ID for a build
+     * @param  {String} config.startTime     Start time fo build
+     * @param  {String} config.buildStatus     Status of build
+     * @return {Promise}
      */
     async _startTimer(config) {
         try {
@@ -462,7 +467,10 @@ class ExecutorQueue extends Executor {
 
     /**
      * Removes start time info key from timeout queue
-     * @param {Object} config
+     * @method status
+     * @param  {Object} config               Configuration
+     * @param  {String} config.buildId       Unique ID for a build
+     * @return {Promise}
      */
     async _stopTimer(config) {
         try {
