@@ -40,7 +40,6 @@ describe('index test', () => {
     let redisConstructorMock;
     let cronMock;
     let freezeWindowsMock;
-    let winstonMock;
     let reqMock;
     let pipelineMock;
     let buildMock;
@@ -93,10 +92,6 @@ describe('index test', () => {
         };
         spyMultiWorker = sinon.spy(resqueMock, 'MultiWorker');
         spyScheduler = sinon.spy(resqueMock, 'Scheduler');
-        winstonMock = {
-            info: sinon.stub(),
-            error: sinon.stub()
-        };
         redisMock = {
             hdel: sinon.stub().yieldsAsync(),
             hset: sinon.stub().yieldsAsync(),
@@ -135,7 +130,6 @@ describe('index test', () => {
         mockery.registerMock('ioredis', redisConstructorMock);
         mockery.registerMock('./lib/cron', cronMock);
         mockery.registerMock('./lib/freezeWindows', freezeWindowsMock);
-        mockery.registerMock('winston', winstonMock);
         mockery.registerMock('requestretry', reqMock);
 
         /* eslint-disable global-require */
@@ -452,8 +446,21 @@ describe('index test', () => {
                 assert.equal(buildMock.stats.queueEnterTime, isoTime);
                 sandbox.restore();
             });
-        }
-        );
+        });
+
+        it('enqueues a build and with enqueueTime', () => {
+            buildMock.stats = {};
+            testConfig.build = buildMock;
+            const config = Object.assign({}, testConfig, { enqueueTime: new Date() });
+
+            return executor.start(config).then(() => {
+                assert.calledTwice(queueMock.connect);
+                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
+                    JSON.stringify(config));
+                assert.calledWith(queueMock.enqueue, 'builds', 'start',
+                    [partialTestConfigToString]);
+            });
+        });
 
         it('enqueues a build and caches the config', () => executor.start(testConfig).then(() => {
             assert.calledTwice(queueMock.connect);

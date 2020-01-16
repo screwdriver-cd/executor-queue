@@ -47,10 +47,10 @@
     "ioredis": "^3.2.2",
     "node-resque": "^5.5.3",
     "requestretry": "^3.1.0",
-    "screwdriver-data-schema": "^18.47.7",
-    "screwdriver-executor-base": "^7.2.1",
+    "screwdriver-data-schema": "^19.1.1",
+    "screwdriver-executor-base": "^7.4.0",
     "string-hash": "^1.1.3",
-    "winston": "^2.4.4"
+    "screwdriver-logger": "^1.0.0"
   },
   "release": {
     "debug": false,

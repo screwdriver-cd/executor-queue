@@ -1,12 +1,12 @@
 'use strict';
 
 const Executor = require('screwdriver-executor-base');
+const logger = require('screwdriver-logger');
 const Redis = require('ioredis');
 const Resque = require('node-resque');
 const fuses = require('circuit-fuses');
 const requestretry = require('requestretry');
 const hoek = require('hoek');
-const winston = require('winston');
 const cron = require('./lib/cron');
 const timeOutOfWindows = require('./lib/freezeWindows').timeOutOfWindows;
 const Breaker = fuses.breaker;
@@ -97,7 +97,7 @@ class ExecutorQueue extends Executor {
                         return await this.startPeriodic(
                             Object.assign(JSON.parse(fullConfig), { triggerBuild: true }));
                     } catch (err) {
-                        winston.error('err in startDelayed job: ', err);
+                        logger.error('err in startDelayed job: ', err);
                         throw err;
                     }
                 }
@@ -110,7 +110,7 @@ class ExecutorQueue extends Executor {
 
                         return await this.startFrozen(JSON.parse(fullConfig));
                     } catch (err) {
-                        winston.error('err in startFrozen job: ', err);
+                        logger.error('err in startFrozen job: ', err);
                         throw err;
                     }
                 }
@@ -131,41 +131,41 @@ class ExecutorQueue extends Executor {
         this.scheduler = new Resque.Scheduler({ connection: redisConnection });
 
         this.multiWorker.on('start', workerId =>
-            winston.info(`worker[${workerId}] started`));
+            logger.info(`worker[${workerId}] started`));
         this.multiWorker.on('end', workerId =>
-            winston.info(`worker[${workerId}] ended`));
+            logger.info(`worker[${workerId}] ended`));
         this.multiWorker.on('cleaning_worker', (workerId, worker, pid) =>
-            winston.info(`cleaning old worker ${worker} pid ${pid}`));
+            logger.info(`cleaning old worker ${worker} pid ${pid}`));
         this.multiWorker.on('job', (workerId, queue, job) =>
-            winston.info(`worker[${workerId}] working job ${queue} ${JSON.stringify(job)}`));
+            logger.info(`worker[${workerId}] working job ${queue} ${JSON.stringify(job)}`));
         this.multiWorker.on('reEnqueue', (workerId, queue, job, plugin) =>
             // eslint-disable-next-line max-len
-            winston.info(`worker[${workerId}] reEnqueue job (${plugin}) ${queue} ${JSON.stringify(job)}`));
+            logger.info(`worker[${workerId}] reEnqueue job (${plugin}) ${queue} ${JSON.stringify(job)}`));
         this.multiWorker.on('success', (workerId, queue, job, result) =>
             // eslint-disable-next-line max-len
-            winston.info(`worker[${workerId}] job success ${queue} ${JSON.stringify(job)} >> ${result}`));
+            logger.info(`worker[${workerId}] job success ${queue} ${JSON.stringify(job)} >> ${result}`));
         this.multiWorker.on('failure', (workerId, queue, job, failure) =>
             // eslint-disable-next-line max-len
-            winston.info(`worker[${workerId}] job failure ${queue} ${JSON.stringify(job)} >> ${failure}`));
+            logger.info(`worker[${workerId}] job failure ${queue} ${JSON.stringify(job)} >> ${failure}`));
         this.multiWorker.on('error', (workerId, queue, job, error) =>
-            winston.error(`worker[${workerId}] error ${queue} ${JSON.stringify(job)} >> ${error}`));
+            logger.error(`worker[${workerId}] error ${queue} ${JSON.stringify(job)} >> ${error}`));
 
         // multiWorker emitters
         this.multiWorker.on('internalError', error =>
-            winston.error(error));
+            logger.error(error));
 
         this.scheduler.on('start', () =>
-            winston.info('scheduler started'));
+            logger.info('scheduler started'));
         this.scheduler.on('end', () =>
-            winston.info('scheduler ended'));
+            logger.info('scheduler ended'));
         this.scheduler.on('master', state =>
-            winston.info(`scheduler became master ${state}`));
+            logger.info(`scheduler became master ${state}`));
         this.scheduler.on('error', error =>
-            winston.info(`scheduler error >> ${error}`));
+            logger.info(`scheduler error >> ${error}`));
         this.scheduler.on('workingTimestamp', timestamp =>
-            winston.info(`scheduler working timestamp ${timestamp}`));
+            logger.info(`scheduler working timestamp ${timestamp}`));
         this.scheduler.on('transferredJob', (timestamp, job) =>
-            winston.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
+            logger.info(`scheduler enqueuing job timestamp  >>  ${JSON.stringify(job)}`));
 
         this.multiWorker.start();
         this.scheduler.connect().then(() => this.scheduler.start());
@@ -180,7 +180,11 @@ class ExecutorQueue extends Executor {
             await this.scheduler.end();
             await this.queue.end();
         } catch (err) {
+<<<<<<< HEAD
             winston.error(`failed to end executor queue: ${err}`);
+=======
+            logger.error(`failed to end executor queue: ${err}`);
+>>>>>>> 2b093bb7adcf86a756cf23e55a68f689218c6c4f
         }
     }
 
@@ -199,7 +203,7 @@ class ExecutorQueue extends Executor {
         const admin = await pipelineInstance.getFirstAdmin();
         const jwt = this.userTokenGen(admin.username, {}, pipeline.scmContext);
 
-        winston.info(`POST event for pipeline ${pipeline.id}:${job.name}` +
+        logger.info(`POST event for pipeline ${pipeline.id}:${job.name}` +
             `using user ${admin.username}`);
         const options = {
             url: `${apiUri}/v4/events`,
@@ -310,7 +314,7 @@ class ExecutorQueue extends Executor {
             try {
                 await this.postBuildEvent(config);
             } catch (err) {
-                winston.error(`failed to post build event for job ${job.id}: ${err}`);
+                logger.error(`failed to post build event for job ${job.id}: ${err}`);
             }
         }
 
@@ -346,7 +350,7 @@ class ExecutorQueue extends Executor {
                 await this.queueBreaker.runCommand('enqueueAt', next,
                     this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }]);
             } catch (err) {
-                winston.error(`failed to add to delayed queue for job ${job.id}: ${err}`);
+                logger.error(`failed to add to delayed queue for job ${job.id}: ${err}`);
             }
         }
 
@@ -385,7 +389,7 @@ class ExecutorQueue extends Executor {
         };
 
         if (config.jobState === 'DISABLED' || config.jobArchived === true) {
-            winston.error(`job ${config.jobName} is disabled or archived`);
+            logger.error(`job ${config.jobName} is disabled or archived`);
 
             return Promise.resolve();
         }
@@ -394,7 +398,7 @@ class ExecutorQueue extends Executor {
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                winston.error(`failed to post build event for job ${config.jobId}: ${err}`);
+                logger.error(`failed to post build event for job ${config.jobId}: ${err}`);
 
                 return Promise.resolve();
             });
@@ -488,7 +492,7 @@ class ExecutorQueue extends Executor {
                 status: 'FROZEN',
                 statusMessage: `Blocked by freeze window, re-enqueued to ${currentTime}`
             }).catch((err) => {
-                winston.error(`failed to update build status for build ${buildId}: ${err}`);
+                logger.error(`failed to update build status for build ${buildId}: ${err}`);
 
                 return Promise.resolve();
             });
@@ -509,6 +513,8 @@ class ExecutorQueue extends Executor {
                 }]
             );
         } else {
+            // set the start time in the queue
+            Object.assign(config, { enqueueTime: new Date() });
             // Store the config in redis
             await this.redisBreaker.runCommand('hset', this.buildConfigTable,
                 buildId, JSON.stringify(config));
