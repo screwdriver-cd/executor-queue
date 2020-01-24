@@ -15,6 +15,7 @@ const EXPIRE_TIME = 1800; // 30 mins
 const RETRY_LIMIT = 3;
 const RETRY_DELAY = 5;
 const DEFAULT_BUILD_TIMEOUT = 90;
+const RETRY_COUNT = 3;
 
 class ExecutorQueue extends Executor {
     /**
@@ -312,7 +313,7 @@ class ExecutorQueue extends Executor {
             try {
                 await this.postBuildEvent(config);
             } catch (err) {
-                logger.error(`failed to post build event for job ${job.id}: ${err}`);
+                logger.error(`periodic builds: failed to post build event for job ${job.id}: ${err}`);
             }
         }
 
@@ -328,31 +329,40 @@ class ExecutorQueue extends Executor {
                     triggerBuild: false
                 })));
 
-            // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-            let shouldRetry = false;
+            await this.processPeriodic(next, job, RETRY_COUNT);
+        }
 
+        return Promise.resolve();
+    }
+
+    /**
+     * @async  processPeriodic
+     * @param {Number} next epoch time
+     * @param {Object} job Job object
+     * @param {Number} retries Number of retries
+     * @return {Promise}
+     */
+    async processPeriodic(next, job, retries) {
+        function fn() {
             try {
+                // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
                 await this.queue.enqueueAt(next, this.periodicBuildQueue,
                     'startDelayed', [{ jobId: job.id }]);
             } catch (err) {
                 // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
-                // eslint-disable-next-line max-len
                 if (err && err.message !== 'Job already enqueued at this time with same arguments') {
-                    shouldRetry = true;
+                    throw err;
                 }
             }
-            if (!shouldRetry) {
-                return Promise.resolve();
-            }
+        }
+        while (retries-- > 0) {
             try {
-                await this.queueBreaker.runCommand('enqueueAt', next,
-                    this.periodicBuildQueue, 'startDelayed', [{ jobId: job.id }]);
+                fn();
+                retries = 0;
             } catch (err) {
-                logger.error(`failed to add to delayed queue for job ${job.id}: ${err}`);
+                logger.error(`failed to execute fn with err ${err}, retry count left ${retries}`);
             }
         }
-
-        return Promise.resolve();
     }
 
     /**
@@ -396,7 +406,7 @@ class ExecutorQueue extends Executor {
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                logger.error(`failed to post build event for job ${config.jobId}: ${err}`);
+                logger.error(`frozen builds: failed to post build event for job ${config.jobId}: ${err}`);
 
                 return Promise.resolve();
             });
