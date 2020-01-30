@@ -234,7 +234,6 @@ class ExecutorQueue extends Executor {
                 if (!err && response.statusCode === 201) {
                     return resolve(response);
                 }
-
                 if (response.statusCode !== 201) {
                     return reject(JSON.stringify(response.body));
                 }
@@ -290,7 +289,7 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startPeriodic(config) {
-        const { job, tokenGen, isUpdate, triggerBuild } = config;
+        const { pipeline, job, tokenGen, isUpdate, triggerBuild } = config;
         // eslint-disable-next-line max-len
         const buildCron = hoek.reach(job, 'permutations>0>annotations>screwdriver.cd/buildPeriodically',
             { separator: '>' });
@@ -312,7 +311,8 @@ class ExecutorQueue extends Executor {
             try {
                 await this.postBuildEvent(config);
             } catch (err) {
-                logger.error(`failed to post build event for job ${job.id}: ${err}`);
+                logger.error('periodic builds: failed to post build event for job'
+                    + `${job.id} in pipeline ${pipeline.id}: ${err}`);
             }
         }
 
@@ -396,7 +396,8 @@ class ExecutorQueue extends Executor {
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                logger.error(`failed to post build event for job ${config.jobId}: ${err}`);
+                logger.error('frozen builds: failed to post build event for job'
+                    + `${config.jobId}:${config.pipeline.id} ${err}`);
 
                 return Promise.resolve();
             });
