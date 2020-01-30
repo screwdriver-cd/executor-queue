@@ -235,7 +235,6 @@ class ExecutorQueue extends Executor {
                 if (!err && response.statusCode === 201) {
                     return resolve(response);
                 }
-
                 if (response.statusCode !== 201) {
                     return reject(JSON.stringify(response.body));
                 }
@@ -291,76 +290,94 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startPeriodic(config) {
-        const { job, tokenGen, isUpdate, triggerBuild } = config;
-        // eslint-disable-next-line max-len
-        const buildCron = hoek.reach(job, 'permutations>0>annotations>screwdriver.cd/buildPeriodically',
-            { separator: '>' });
+        try {
+            const { pipeline, job, tokenGen, isUpdate, triggerBuild } = config;
+            // eslint-disable-next-line max-len
+            const buildCron = hoek.reach(job, 'permutations>0>annotations>screwdriver.cd/buildPeriodically',
+                { separator: '>' });
 
-        // Save tokenGen to current executor object so we can access it in postBuildEvent
-        if (!this.userTokenGen) {
-            this.userTokenGen = tokenGen;
-        }
-
-        if (isUpdate) {
-            // eslint-disable-next-line no-underscore-dangle
-            await this._stopPeriodic({ jobId: job.id });
-        }
-
-        if (triggerBuild) {
-            config.causeMessage = 'Started by periodic build scheduler';
-
-            // Even if post event failed for this event after retry, we should still enqueue the next event
-            try {
-                await this.postBuildEvent(config);
-            } catch (err) {
-                logger.error(`periodic builds: failed to post build event for job ${job.id}: ${err}`);
+            // Save tokenGen to current executor object so we can access it in postBuildEvent
+            if (!this.userTokenGen) {
+                this.userTokenGen = tokenGen;
             }
-        }
 
-        if (buildCron && job.state === 'ENABLED' && !job.archived) {
-            await this.connect();
+            if (isUpdate) {
+                // eslint-disable-next-line no-underscore-dangle
+                await this._stopPeriodic({ jobId: job.id });
+            }
 
-            const next = cron.next(cron.transform(buildCron, job.id));
+            if (triggerBuild) {
+                config.causeMessage = 'Started by periodic build scheduler';
 
-            // Store the config in redis
-            await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
-                job.id, JSON.stringify(Object.assign(config, {
-                    isUpdate: false,
-                    triggerBuild: false
-                })));
+                // Even if post event failed for this event after retry, we should still enqueue the next event
+                try {
+                    await this.postBuildEvent(config);
+                } catch (err) {
+                    logger.error('periodic builds: failed to post build event for job'
+                        + `${job.id} in pipeline ${pipeline.id}: ${err}`);
+                }
+            }
 
-            await this.processPeriodic(next, job, RETRY_COUNT);
+            if (buildCron && job.state === 'ENABLED' && !job.archived) {
+                await this.connect();
+
+                const next = cron.next(cron.transform(buildCron, job.id));
+
+                // Store the config in redis
+                await this.redisBreaker.runCommand('hset', this.periodicBuildTable,
+                    job.id, JSON.stringify(Object.assign(config, {
+                        isUpdate: false,
+                        triggerBuild: false
+                    })));
+
+                await this.retry(this.processPeriodic, [next, job], RETRY_COUNT);
+            }
+        } catch (err) {
+            logger.error(`failed to execute periodic build ${err}` +
+                `for ${config.job.id} in pipeline ${config.pipeline.id}`);
         }
 
         return Promise.resolve();
     }
 
     /**
+     * A retry wrapper fn to process priodic jobs
      * @async  processPeriodic
-     * @param {Number} next epoch time
-     * @param {Object} job Job object
+     * @param {Function} the fn to be executed
+     * @param {Array} the args array
      * @param {Number} retries Number of retries
      * @return {Promise}
      */
-    async processPeriodic(next, job, retries) {
-        function fn() {
-            try {
-                // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
-                await this.queue.enqueueAt(next, this.periodicBuildQueue,
-                    'startDelayed', [{ jobId: job.id }]);
-            } catch (err) {
-                // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
-                if (err && err.message !== 'Job already enqueued at this time with same arguments') {
-                    throw err;
-                }
+    async retry(fn, args, retries) {
+        try {
+            await fn(...args);
+        } catch (err) {
+            logger.error(`failed to execute fn with err ${err}, retry count left ${retries}`);
+            if (retries === 0) {
+                return Promise.reject(err);
             }
+            await this.retry(fn, args, retries - 1);
         }
-        while (retries-- > 0) {
-            try {
-                fn();
-                retries = 0;
-            } catch (err) {
-                logger.error(`failed to execute fn with err ${err}, retry count left ${retries}`);
+
+        return Promise.resolve();
+    }
+
+    /**
+     * Adds the periodic job to the queue for next timestamp
+     * @async  processPeriodic
+     * @param {Number} next epoch time
+     * @param {Object} job Job object
+     * @return {Promise}
+     */
+    async processPeriodic(next, job) {
+        try {
+            // Note: arguments to enqueueAt are [timestamp, queue name, job name, array of args]
+            await this.queue.enqueueAt(next, this.periodicBuildQueue,
+                'startDelayed', [{ jobId: job.id }]);
+        } catch (err) {
+            // Error thrown by node-resque if there is duplicate: https://github.com/taskrabbit/node-resque/blob/master/lib/queue.js#L65
+            if (err && err.message !== 'Job already enqueued at this time with same arguments') {
+                throw err;
             }
         }
     }
@@ -406,7 +423,8 @@ class ExecutorQueue extends Executor {
 
         return this.postBuildEvent(newConfig)
             .catch((err) => {
-                logger.error(`frozen builds: failed to post build event for job ${config.jobId}: ${err}`);
+                logger.error('frozen builds: failed to post build event for job'
+                    + `${config.jobId}:${config.pipeline.id} ${err}`);
 
                 return Promise.resolve();
             });
