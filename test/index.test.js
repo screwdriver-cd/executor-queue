@@ -3,50 +3,20 @@
 /* eslint-disable no-underscore-dangle */
 
 const chai = require('chai');
-const util = require('util');
 const assert = chai.assert;
 const mockery = require('mockery');
 const sinon = require('sinon');
-const testConnection = require('./data/testConnection.json');
 const testConfig = require('./data/fullConfig.json');
 const testPipeline = require('./data/testPipeline.json');
 const testJob = require('./data/testJob.json');
-const { buildId, jobId, blockedBy } = testConfig;
-const partialTestConfig = {
-    buildId,
-    jobId,
-    blockedBy
-};
-const partialTestConfigToString = Object.assign({}, partialTestConfig, {
-    blockedBy: blockedBy.toString()
-});
-const testAdmin = {
-    username: 'admin'
-};
-const EventEmitter = require('events').EventEmitter;
 
 sinon.assert.expose(chai.assert, { prefix: '' });
 
 describe('index test', () => {
     let Executor;
     let executor;
-    let multiWorker;
-    let spyMultiWorker;
-    let scheduler;
-    let spyScheduler;
-    let resqueMock;
-    let queueMock;
-    let redisMock;
-    let redisConstructorMock;
-    let cronMock;
-    let freezeWindowsMock;
-    let reqMock;
-    let pipelineMock;
-    let buildMock;
-    let pipelineFactoryMock;
-    let fakeResponse;
-    let userTokenGen;
-    let testDelayedConfig;
+    let mockRequest;
+    let requestOptions;
 
     before(() => {
         mockery.enable({
@@ -56,96 +26,34 @@ describe('index test', () => {
     });
 
     beforeEach(() => {
-        userTokenGen = sinon.stub().returns('admintoken');
-        testDelayedConfig = {
+        Object.assign(testConfig, {
             pipeline: testPipeline,
-            job: testJob,
-            apiUri: 'http://localhost',
-            tokenGen: userTokenGen
-        };
-        multiWorker = function () {
-            this.start = () => { };
-            this.end = sinon.stub().resolves();
-        };
-        scheduler = function () {
-            this.start = sinon.stub().resolves();
-            this.connect = sinon.stub().resolves();
-            this.end = sinon.stub().resolves();
-        };
-        util.inherits(multiWorker, EventEmitter);
-        util.inherits(scheduler, EventEmitter);
-        queueMock = {
-            connect: sinon.stub().resolves(),
-            enqueue: sinon.stub().resolves(),
-            enqueueAt: sinon.stub().resolves(),
-            del: sinon.stub().resolves(1),
-            delDelayed: sinon.stub().resolves(1),
-            connection: {
-                connected: false
-            },
-            end: sinon.stub().resolves()
-        };
-        resqueMock = {
-            Queue: sinon.stub().returns(queueMock),
-            MultiWorker: multiWorker,
-            Scheduler: scheduler
-        };
-        spyMultiWorker = sinon.spy(resqueMock, 'MultiWorker');
-        spyScheduler = sinon.spy(resqueMock, 'Scheduler');
-        redisMock = {
-            hdel: sinon.stub().yieldsAsync(),
-            hset: sinon.stub().yieldsAsync(),
-            set: sinon.stub().yieldsAsync(),
-            expire: sinon.stub().yieldsAsync(),
-            hget: sinon.stub().yieldsAsync()
-        };
-        redisConstructorMock = sinon.stub().returns(redisMock);
-        cronMock = {
-            transform: sinon.stub().returns('H H H H H'),
-            next: sinon.stub().returns(1500000)
-        };
-        freezeWindowsMock = {
-            timeOutOfWindows: (windows, date) => date
-        };
-
-        fakeResponse = {
-            statusCode: 201,
-            body: {
-                id: '12345'
-            }
-        };
-        reqMock = sinon.stub();
-        pipelineMock = {
-            getFirstAdmin: sinon.stub().resolves(testAdmin)
-        };
-        pipelineFactoryMock = {
-            get: sinon.stub().resolves(pipelineMock)
-        };
-        buildMock = {
-            update: sinon.stub().resolves({
-                id: buildId
-            })
-        };
-
-        mockery.registerMock('node-resque', resqueMock);
-        mockery.registerMock('ioredis', redisConstructorMock);
-        mockery.registerMock('./lib/cron', cronMock);
-        mockery.registerMock('./lib/freezeWindows', freezeWindowsMock);
-        mockery.registerMock('requestretry', reqMock);
+            apiUri: 'http://localhost:3000',
+            token: 'admintoken'
+        });
+        mockRequest = sinon.stub();
+        mockery.registerMock('requestretry', mockRequest);
 
         /* eslint-disable global-require */
         Executor = require('../index');
         /* eslint-enable global-require */
 
         executor = new Executor({
-            redisConnection: testConnection,
-            breaker: {
-                retry: {
-                    retries: 1
-                }
-            },
-            pipelineFactory: pipelineFactoryMock
+            ecosystem: {
+                queueUri: 'http://localhost'
+            }
         });
+        requestOptions = {
+            headers: {
+                Authorization: 'Bearer admintoken',
+                'Content-Type': 'application/json'
+            },
+            json: true,
+            body: testConfig,
+            maxAttempts: 3,
+            retryDelay: 5000,
+            retryStrategy: executor.requestRetryStrategy
+        };
     });
 
     afterEach(() => {
@@ -162,653 +70,231 @@ describe('index test', () => {
             assert.instanceOf(executor, Executor);
         });
 
-        it('constructs the multiWorker', () => {
-            const expectedConfig = {
-                connection: testConnection,
-                queues: ['periodicBuilds', 'frozenBuilds'],
-                minTaskProcessors: 1,
-                maxTaskProcessors: 10,
-                checkTimeout: 1000,
-                maxEventLoopDelay: 10,
-                toDisconnectProcessors: true
-            };
-
-            assert.calledWith(spyMultiWorker, sinon.match(expectedConfig), sinon.match.any);
-        });
-
-        it('constructs the scheduler', () => {
-            const expectedConfig = {
-                connection: testConnection
-            };
-
-            assert.calledWith(spyScheduler, sinon.match(expectedConfig));
-        });
-
-        it('constructs the executor when no breaker config is passed in', () => {
-            executor = new Executor({
-                redisConnection: testConnection,
-                pipelineFactory: pipelineFactoryMock
-            });
-
+        it('sets the queue uri', () => {
             assert.instanceOf(executor, Executor);
-        });
-
-        it('takes in a prefix', () => {
-            executor = new Executor({
-                redisConnection: testConnection,
-                prefix: 'beta_',
-                pipelineFactory: pipelineFactoryMock
-            });
-
-            assert.instanceOf(executor, Executor);
-            assert.strictEqual(executor.prefix, 'beta_');
-            assert.strictEqual(executor.buildQueue, 'beta_builds');
-            assert.strictEqual(executor.buildConfigTable, 'beta_buildConfigs');
-        });
-
-        it('throws when not given a redis connection', () => {
-            assert.throws(() => new Executor(), 'No redis connection passed in');
-        });
-
-        it('throws when not given a pipelineFactory', () => {
-            assert.throws(() => new Executor({
-                redisConnection: testConnection
-            }));
+            assert.strictEqual(executor.queueUri, 'http://localhost');
         });
     });
 
-    describe('_startPeriodic', () => {
-        beforeEach(() => {
-            reqMock.yieldsAsync(null, fakeResponse, fakeResponse.body);
-        });
-        it('rejects if it can\'t establish a connection', function () {
-            queueMock.connect.rejects(new Error('couldn\'t connect'));
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.fail('Should not get here');
-            }, (err) => {
-                assert.instanceOf(err, Error);
-            });
-        });
-
-        it('doesn\'t call connect if there\'s already a connection', () => {
-            queueMock.connection.connected = true;
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.notCalled(queueMock.connect);
-            });
-        });
-
-        it('enqueues a new delayed job in the queue', () =>
-            executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'periodicBuildConfigs', testJob.id,
-                    JSON.stringify(testDelayedConfig));
-                assert.calledWith(cronMock.transform, '* * * * *', testJob.id);
-                assert.calledWith(cronMock.next, 'H H H H H');
-                assert.calledWith(queueMock.enqueueAt, 1500000, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-            }));
-
-        it('do not enqueue the same delayed job in the queue', () => {
-            const err = new Error('Job already enqueued at this time with same arguments');
-
-            queueMock.enqueueAt = sinon.stub().rejects(err);
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledWith(cronMock.next, 'H H H H H');
-                assert.calledOnce(queueMock.enqueueAt);
-            });
-        });
-
-        it('stops and reEnqueues an existing job if isUpdate flag is passed', () => {
-            testDelayedConfig.isUpdate = true;
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'periodicBuildConfigs', testJob.id,
-                    JSON.stringify(testDelayedConfig));
-                assert.calledWith(queueMock.enqueueAt, 1500000, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-                assert.calledWith(queueMock.delDelayed, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-                assert.calledWith(redisMock.hdel, 'periodicBuildConfigs', testJob.id);
-            });
-        });
-
-        it('stops but does not reEnqueue an existing job if it is disabled', () => {
-            testDelayedConfig.isUpdate = true;
-            testDelayedConfig.job.state = 'DISABLED';
-            testDelayedConfig.job.archived = false;
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.notCalled(redisMock.hset);
-                assert.notCalled(queueMock.enqueueAt);
-                assert.calledWith(queueMock.delDelayed, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-                assert.calledWith(redisMock.hdel, 'periodicBuildConfigs', testJob.id);
-            });
-        });
-
-        it('stops but does not reEnqueue an existing job if it is archived', () => {
-            testDelayedConfig.isUpdate = true;
-            testDelayedConfig.job.state = 'ENABLED';
-            testDelayedConfig.job.archived = true;
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.notCalled(redisMock.hset);
-                assert.notCalled(queueMock.enqueueAt);
-                assert.calledWith(queueMock.delDelayed, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-                assert.calledWith(redisMock.hdel, 'periodicBuildConfigs', testJob.id);
-            });
-        });
-
-        it('trigger build and do not enqueue next job if archived', () => {
-            testDelayedConfig.isUpdate = true;
-            testDelayedConfig.job.state = 'ENABLED';
-            testDelayedConfig.job.archived = true;
-            testDelayedConfig.triggerBuild = true;
-
-            const options = {
-                url: 'http://localhost/v4/events',
-                method: 'POST',
-                headers: {
-                    Authorization: 'Bearer admintoken',
-                    'Content-Type': 'application/json'
-                },
-                json: true,
-                body: {
-                    causeMessage: 'Started by periodic build scheduler',
-                    creator: { name: 'Screwdriver scheduler', username: 'sd:scheduler' },
-                    pipelineId: testDelayedConfig.pipeline.id,
-                    startFrom: testDelayedConfig.job.name
-                },
-                maxAttempts: 3,
-                retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategyPostEvent
-            };
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.notCalled(redisMock.hset);
-                assert.notCalled(queueMock.enqueueAt);
-                assert.calledWith(queueMock.delDelayed, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-                assert.calledWith(redisMock.hdel, 'periodicBuildConfigs', testJob.id);
-                assert.calledOnce(userTokenGen);
-                assert.calledWith(reqMock, options);
-            });
-        });
-
-        it('trigger build and enqueue next job', () => {
-            testDelayedConfig.isUpdate = false;
-            testDelayedConfig.job.state = 'ENABLED';
-            testDelayedConfig.job.archived = false;
-            testDelayedConfig.triggerBuild = true;
-
-            const options = {
-                url: 'http://localhost/v4/events',
-                method: 'POST',
-                headers: {
-                    Authorization: 'Bearer admintoken',
-                    'Content-Type': 'application/json'
-                },
-                json: true,
-                body: {
-                    causeMessage: 'Started by periodic build scheduler',
-                    creator: { name: 'Screwdriver scheduler', username: 'sd:scheduler' },
-                    pipelineId: testDelayedConfig.pipeline.id,
-                    startFrom: testDelayedConfig.job.name
-                },
-                maxAttempts: 3,
-                retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategyPostEvent
-            };
-
-            return executor.startPeriodic(testDelayedConfig).then(() => {
-                assert.notCalled(queueMock.delDelayed);
-                assert.calledOnce(userTokenGen);
-                assert.calledWith(reqMock, options);
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'periodicBuildConfigs', testJob.id,
-                    JSON.stringify(testDelayedConfig));
-                assert.calledWith(cronMock.transform, '* * * * *', testJob.id);
-                assert.calledWith(cronMock.next, 'H H H H H');
-                assert.calledWith(queueMock.enqueueAt, 1500000, 'periodicBuilds', 'startDelayed', [{
-                    jobId: testJob.id
-                }]);
-            });
-        });
-    });
-
-    describe('_start', () => {
-        it('rejects if it can\'t establish a connection', () => {
-            queueMock.connect.rejects(new Error('couldn\'t connect'));
-
-            return executor.start(testConfig).then(() => {
-                assert.fail('Should not get here');
-            }, (err) => {
-                assert.instanceOf(err, Error);
-            });
-        });
-
-        it('enqueues a build and caches the config', () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
+    describe('_startPeriodic', (done) => {
+        it('Calls api to start periodic build', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const periodicConfig = Object.assign({}, testConfig, {
+                username: 'admin'
             });
 
-            sandbox.useFakeTimers(dateNow);
-            buildMock.stats = {};
-            testConfig.build = buildMock;
-
-            return executor.start(testConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                    JSON.stringify(testConfig));
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
-                assert.calledOnce(buildMock.update);
-                assert.equal(buildMock.stats.queueEnterTime, isoTime);
-                sandbox.restore();
-            });
-        }
-        );
-
-        it('enqueues a build and when force start is on', () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            sandbox.useFakeTimers(dateNow);
-            buildMock.stats = {};
-            testConfig.build = buildMock;
-            testConfig.causeMessage = '[force start] Need to push hotfix';
-
-            return executor.start(testConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                    JSON.stringify(testConfig));
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
-                assert.calledOnce(buildMock.update);
-                assert.equal(buildMock.stats.queueEnterTime, isoTime);
-                sandbox.restore();
-            });
-        });
-
-        it('enqueues a build and with enqueueTime', () => {
-            buildMock.stats = {};
-            testConfig.build = buildMock;
-            const config = Object.assign({}, testConfig, { enqueueTime: new Date() });
-
-            return executor.start(config).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                    JSON.stringify(config));
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
-            });
-        });
-
-        it('enqueues a build and caches the config', () =>
-            executor.start(testConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'buildConfigs', buildId,
-                    JSON.stringify(testConfig));
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
-            }));
-
-        it('doesn\'t call connect if there\'s already a connection', () => {
-            queueMock.connection.connected = true;
-
-            return executor.start(testConfig).then(() => {
-                assert.notCalled(queueMock.connect);
-                assert.calledWith(queueMock.enqueue, 'builds', 'start',
-                    [partialTestConfigToString]);
-            });
-        });
-    });
-
-    describe('_startFrozen', () => {
-        it('enqueues a delayed job if in freeze window', () => {
-            mockery.resetCache();
-            reqMock.yieldsAsync(null, fakeResponse, fakeResponse.body);
-
-            const freezeWindowsMockB = {
-                timeOutOfWindows: (windows, date) => {
-                    date.setUTCMinutes(date.getUTCMinutes() + 1);
-
-                    return date;
-                }
-            };
-
-            mockery.deregisterMock('./lib/freezeWindows');
-            mockery.registerMock('./lib/freezeWindows', freezeWindowsMockB);
-
-            /* eslint-disable global-require */
-            Executor = require('../index');
-            /* eslint-enable global-require */
-
-            executor = new Executor({
-                redisConnection: testConnection,
-                breaker: {
-                    retry: {
-                        retries: 1
-                    }
-                },
-                pipelineFactory: pipelineFactoryMock
-            });
-
-            const dateNow = new Date();
-
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            sandbox.useFakeTimers(dateNow.getTime());
-
-            const options = {
-                json: true,
-                method: 'PUT',
-                uri: `http://api.com/v4/builds/${testConfig.buildId}`,
-                body: {
-                    status: 'FROZEN',
-                    statusMessage: sinon.match('Blocked by freeze window, re-enqueued to ')
-                },
-                headers: {
-                    Authorization: 'Bearer asdf',
-                    'Content-Type': 'application/json'
-                },
-                maxAttempts: 3,
-                retryDelay: 5000,
-                retryStrategy: executor.requestRetryStrategy
-            };
-
-            return executor.start(testConfig).then(() => {
-                assert.calledTwice(queueMock.connect);
-                assert.calledWith(queueMock.delDelayed, 'frozenBuilds', 'startFrozen', [{
-                    jobId
-                }]);
-                assert.calledWith(redisMock.hset, 'frozenBuildConfigs', jobId,
-                    JSON.stringify(testConfig));
-                assert.calledWith(queueMock.enqueueAt, dateNow.getTime() + 60000, 'frozenBuilds',
-                    'startFrozen', [{
-                        jobId
-                    }]);
-                assert.calledWith(reqMock, options);
-                sandbox.restore();
-            });
-        });
-    });
-
-    describe('_stop', () => {
-        it('rejects if it can\'t establish a connection', function () {
-            queueMock.connect.rejects(new Error('couldn\'t connect'));
-
-            return executor.stop(partialTestConfig).then(() => {
-                assert.fail('Should not get here');
-            }, (err) => {
-                assert.instanceOf(err, Error);
-            });
-        });
-
-        it('removes a start event from the queue and the cached buildconfig', () => {
-            const deleteKey = `deleted_${jobId}_${buildId}`;
-            const stopConfig = Object.assign({ started: false }, partialTestConfigToString);
-
-            return executor.stop(partialTestConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
-                assert.calledWith(redisMock.set, deleteKey, '');
-                assert.calledWith(redisMock.expire, deleteKey, 1800);
-                assert.calledWith(queueMock.enqueue, 'builds', 'stop', [stopConfig]);
-            });
-        });
-
-        it('adds a stop event to the queue if no start events were removed', () => {
-            queueMock.del.resolves(0);
-            const stopConfig = Object.assign({ started: true }, partialTestConfigToString);
-
-            return executor.stop(partialTestConfig).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
-                assert.calledWith(queueMock.enqueue, 'builds', 'stop', [stopConfig]);
-            });
-        });
-
-        it('adds a stop event to the queue if it has no blocked job', () => {
-            queueMock.del.resolves(0);
-            const partialTestConfigUndefined = Object.assign({}, partialTestConfig, {
-                blockedBy: undefined
-            });
-            const stopConfig = Object.assign({ started: true }, partialTestConfigUndefined);
-
-            return executor.stop(partialTestConfigUndefined).then(() => {
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigUndefined]);
-                assert.calledWith(queueMock.enqueue, 'builds', 'stop', [stopConfig]);
-            });
-        });
-
-        it('doesn\'t call connect if there\'s already a connection', () => {
-            queueMock.connection.connected = true;
-
-            return executor.stop(Object.assign({}, partialTestConfig, {
-                annotations: {
-                    'beta.screwdriver.cd/executor': 'screwdriver-executor-k8s'
-                }
-            })).then(() => {
-                assert.notCalled(queueMock.connect);
-                assert.calledWith(queueMock.del, 'builds', 'start', [partialTestConfigToString]);
-            });
-        });
-    });
-
-    describe('cleanUp', () => {
-        it('worker.end() is called', () => {
-            executor.cleanUp().then(() => {
-                assert.called(spyMultiWorker);
-                assert.called(spyScheduler);
-                assert.called(queueMock.end);
-            });
-        });
-    });
-
-    describe('stats', () => {
-        it('returns the correct stats', () => {
-            assert.deepEqual(executor.stats(), {
-                requests: {
-                    total: 0,
-                    timeouts: 0,
-                    success: 0,
-                    failure: 0,
-                    concurrent: 0,
-                    averageTime: 0
-                },
-                breaker: {
-                    isClosed: true
-                }
-            });
-        });
-    });
-
-    describe('_stopTimer', () => {
-        it('does not reject if it can\'t establish a connection', async () => {
-            queueMock.connect.rejects(new Error('couldn\'t connect'));
-            try {
-                await executor.stopTimer({});
-            } catch (err) {
-                assert.fail('Should not get here');
-            }
-        });
-
-        it('removes a key from redis for the specified buildId if it exists', async () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            const timerConfig = {
-                buildId,
-                jobId,
-                startTime: isoTime
-            };
-
-            sandbox.useFakeTimers(dateNow);
-            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync(null, {
-                buildId,
-                jobId,
-                startTime: isoTime
-            });
-
-            await executor.stopTimer(timerConfig);
-
-            assert.calledOnce(queueMock.connect);
-            assert.calledWith(redisMock.hdel, 'timeoutConfigs', buildId);
-            sandbox.restore();
-        });
-
-        it('hdel is not called if buildId does not exist in cache', async () => {
-            redisMock.hget.withArgs('timeoutConfigs', buildId)
-                .yieldsAsync(null, null);
-
-            await executor.stopTimer(testConfig);
-            assert.calledOnce(queueMock.connect);
-            assert.notCalled(redisMock.hdel);
-        });
-    });
-
-    describe('_startTimer', () => {
-        it('does not reject if it can\'t establish a connection', async () => {
-            queueMock.connect.rejects(new Error('couldn\'t connect'));
-            try {
-                await executor.startTimer({});
-            } catch (err) {
-                assert.fail('Should not get here');
-            }
-        });
-
-        it('adds a timeout key if status is RUNNING and caches the config', async () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            const timerConfig = {
-                buildId,
-                jobId,
-                buildStatus: 'RUNNING',
-                startTime: isoTime
-            };
-
-            sandbox.useFakeTimers(dateNow);
-            redisMock.hget.yieldsAsync(null, null);
-            await executor.startTimer(timerConfig);
-            assert.calledOnce(queueMock.connect);
-            assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
-                JSON.stringify({
-                    jobId,
-                    startTime: isoTime,
-                    timeout: 90
-                }));
-            sandbox.restore();
-        });
-
-        it('does not add a timeout key if status is !RUNNING', async () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            const timerConfig = {
-                buildId,
-                jobId,
-                buildStatus: 'QUEUED',
-                startTime: isoTime
-            };
-
-            sandbox.useFakeTimers(dateNow);
-            redisMock.hget.yieldsAsync(null, null);
-
-            await executor.startTimer(timerConfig);
-            assert.calledOnce(queueMock.connect);
-            assert.notCalled(redisMock.hset);
-            sandbox.restore();
-        });
-
-        it('does not add a timeout key if buildId already exists', async () => {
-            const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
-            const timerConfig = {
-                buildId,
-                jobId,
-                buildStatus: 'QUEUED',
-                startTime: isoTime
-            };
-
-            sandbox.useFakeTimers(dateNow);
-            redisMock.hget.withArgs('timeoutConfigs', buildId).yieldsAsync({
-                jobId,
-                startTime: isoTime,
-                timeout: 90
-            });
-
-            await executor.startTimer(timerConfig);
-            assert.calledOnce(queueMock.connect);
-            assert.notCalled(redisMock.hset);
-            sandbox.restore();
-        });
-
-        it('adds a timeout config with specific timeout when annotations present',
-            async () => {
-                const dateNow = Date.now();
-                const isoTime = (new Date(dateNow)).toISOString();
-                const sandbox = sinon.sandbox.create({
-                    useFakeTimers: false
+            const options = Object.assign({}, requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=periodic',
+                    method: 'POST',
+                    body: periodicConfig
                 });
 
-                const timerConfig = {
-                    buildId,
-                    jobId,
-                    buildStatus: 'RUNNING',
-                    startTime: isoTime,
-                    annotations: {
-                        'screwdriver.cd/timeout': 5
-                    }
-                };
+            return executor.startPeriodic(periodicConfig, (err) => {
+                assert.calledWithArgs(mockRequest, periodicConfig, options);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
 
-                sandbox.useFakeTimers(dateNow);
-                redisMock.hget.yieldsAsync(null, null);
-                await executor.startTimer(timerConfig);
-                assert.calledOnce(queueMock.connect);
-                assert.calledWith(redisMock.hset, 'timeoutConfigs', buildId,
-                    JSON.stringify({
-                        jobId,
-                        startTime: isoTime,
-                        timeout: 5
-                    }));
+    describe('_stopPeriodic', (done) => {
+        it('Calls api to stop periodic build', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+
+            const options = Object.assign({}, requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=periodic',
+                    method: 'DELETE',
+                    body: testConfig
+                });
+
+            return executor.stopPeriodic(testConfig, (err) => {
+                assert.calledWithArgs(mockRequest, testConfig, options);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('_start', (done) => {
+        it('Calls api to start build', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const startConfig = Object.assign({}, testConfig, {
+                pipeline: testPipeline
+            });
+
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message',
+                    method: 'POST',
+                    body: startConfig
+                });
+
+            return executor.start(startConfig, (err) => {
+                assert.calledWithArgs(mockRequest, startConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('_startFrozen', (done) => {
+        it('Calls api to start frozen build', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=frozen',
+                    method: 'POST',
+                    body: testConfig
+                });
+
+            return executor.startFrozen(testConfig, (err) => {
+                assert.calledWithArgs(mockRequest, testConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('_stopFrozen', (done) => {
+        it('Calls api to stop frozen builds', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=frozen',
+                    method: 'DELETE',
+                    body: testConfig
+                });
+
+            return executor.stopFrozen(testConfig, (err) => {
+                assert.calledWithArgs(mockRequest, testConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('_stop', (done) => {
+        it('Calls api to stop a build', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const stopConfig = {
+                annotations: testConfig.annotations,
+                blockedBy: testConfig.blockedBy,
+                freezeWindows: testConfig.freezeWindows,
+                buildId: testConfig.buildId,
+                buildClusterName: testConfig.buildClusterName,
+                jobId: testConfig.jobId,
+                token: testConfig.token,
+                pipelineId: testConfig.pipelineId
+            };
+
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message',
+                    method: 'DELETE',
+                    body: stopConfig
+                });
+
+            executor.stop(stopConfig, (err) => {
+                assert.calledWithArgs(mockRequest, stopConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('stats', (done) => {
+        it('Calls api to get stats', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const statsConfig = {
+                buildId: testConfig.buildId,
+                jobId: testConfig.jobId,
+                token: testConfig.token,
+                pipelineId: testConfig.pipelineId
+            };
+
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message',
+                    method: 'GET'
+                });
+
+            return executor.stats(statsConfig, (err) => {
+                assert.calledWithArgs(mockRequest, {}, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
+    describe('_stopTimer', (done) => {
+        it('Calls api to stop timer', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId: testConfig.buildId,
+                jobId: testConfig.jobId,
+                startTime: isoTime,
+                job: testJob,
+                pipeline: testPipeline
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=timer',
+                    method: 'DEELTE',
+                    body: timerConfig
+                });
+
+            return executor.stopTimer(timerConfig, (err) => {
+                assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
+                assert.isNull(err);
+                done();
                 sandbox.restore();
             });
+        });
+    });
+
+    describe('_startTimer', (done) => {
+        it('Calls api to start timer', () => {
+            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            const dateNow = Date.now();
+            const isoTime = (new Date(dateNow)).toISOString();
+            const sandbox = sinon.sandbox.create({
+                useFakeTimers: false
+            });
+
+            const timerConfig = {
+                buildId: testConfig.buildId,
+                jobId: testConfig.jobId,
+                startTime: isoTime,
+                job: testJob,
+                pipeline: testPipeline
+            };
+
+            sandbox.useFakeTimers(dateNow);
+            Object.assign(requestOptions,
+                {
+                    url: 'http://localhost/v1/queue/message?type=timer',
+                    method: 'POST',
+                    body: testConfig
+                });
+
+            return executor.startTimer(timerConfig, (err) => {
+                assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
+                assert.isNull(err);
+                done();
+                sandbox.restore();
+            });
+        });
     });
 });
