@@ -11,5 +11,6 @@
   "apiUri": "http://api.com",
   "token": "asdf",
   "blockedBy": [777, 888],
-  "freezeWindows": ["* * ? * 1", "0-59 0-23 * 1 ?"]
+  "freezeWindows": ["* * ? * 1", "0-59 0-23 * 1 ?"],
+  "pipelineId": "123"
 }
