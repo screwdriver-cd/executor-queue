@@ -191,12 +191,13 @@ class ExecutorQueue extends Executor {
      * @method postBuildEvent
      * @param {Object} config           Configuration
      * @param {Number} [config.eventId] Optional Parent event ID (optional)
+     * @param {Number} config.buildId   Freezed build id
      * @param {Object} config.pipeline  Pipeline of the job
      * @param {Object} config.job       Job object to create periodic builds for
      * @param {String} config.apiUri    Base URL of the Screwdriver API
      * @return {Promise}
      */
-    async postBuildEvent({ pipeline, job, apiUri, eventId, causeMessage }) {
+    async postBuildEvent({ pipeline, job, apiUri, eventId, buildId, causeMessage }) {
         const pipelineInstance = await this.pipelineFactory.get(pipeline.id);
         const admin = await pipelineInstance.getFirstAdmin();
         const jwt = this.userTokenGen(admin.username, {}, pipeline.scmContext);
@@ -227,6 +228,10 @@ class ExecutorQueue extends Executor {
 
         if (eventId) {
             options.body.parentEventId = eventId;
+        }
+
+        if (buildId) {
+            options.body.buildId = buildId;
         }
 
         return new Promise((resolve, reject) => {
