@@ -272,7 +272,7 @@ class ExecutorQueue extends Executor {
                     return resolve(response);
                 }
 
-                if (response.statusCode !== 200) {
+                if (response && response.statusCode !== 200) {
                     return reject(JSON.stringify(response.body));
                 }
 
