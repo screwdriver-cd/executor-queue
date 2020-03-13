@@ -3,7 +3,7 @@
 /* eslint-disable no-underscore-dangle */
 
 const chai = require('chai');
-const assert = chai.assert;
+const { assert } = chai;
 const mockery = require('mockery');
 const sinon = require('sinon');
 const testConfig = require('./data/fullConfig.json');
@@ -76,21 +76,19 @@ describe('index test', () => {
         });
     });
 
-    describe('_startPeriodic', (done) => {
+    describe('_startPeriodic', done => {
         it('Calls api to start periodic build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
-            const periodicConfig = Object.assign({}, testConfig, {
-                username: 'admin'
-            });
+            const periodicConfig = { ...testConfig, username: 'admin' };
 
-            const options = Object.assign({}, requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=periodic',
-                    method: 'POST',
-                    body: periodicConfig
-                });
+            const options = {
+                ...requestOptions,
+                url: 'http://localhost/v1/queue/message?type=periodic',
+                method: 'POST',
+                body: periodicConfig
+            };
 
-            return executor.startPeriodic(periodicConfig, (err) => {
+            return executor.startPeriodic(periodicConfig, err => {
                 assert.calledWithArgs(mockRequest, periodicConfig, options);
                 assert.isNull(err);
                 done();
@@ -98,18 +96,18 @@ describe('index test', () => {
         });
     });
 
-    describe('_stopPeriodic', (done) => {
+    describe('_stopPeriodic', done => {
         it('Calls api to stop periodic build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
 
-            const options = Object.assign({}, requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=periodic',
-                    method: 'DELETE',
-                    body: testConfig
-                });
+            const options = {
+                ...requestOptions,
+                url: 'http://localhost/v1/queue/message?type=periodic',
+                method: 'DELETE',
+                body: testConfig
+            };
 
-            return executor.stopPeriodic(testConfig, (err) => {
+            return executor.stopPeriodic(testConfig, err => {
                 assert.calledWithArgs(mockRequest, testConfig, options);
                 assert.isNull(err);
                 done();
@@ -117,21 +115,18 @@ describe('index test', () => {
         });
     });
 
-    describe('_start', (done) => {
+    describe('_start', done => {
         it('Calls api to start build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
-            const startConfig = Object.assign({}, testConfig, {
-                pipeline: testPipeline
+            const startConfig = { ...testConfig, pipeline: testPipeline };
+
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message',
+                method: 'POST',
+                body: startConfig
             });
 
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message',
-                    method: 'POST',
-                    body: startConfig
-                });
-
-            return executor.start(startConfig, (err) => {
+            return executor.start(startConfig, err => {
                 assert.calledWithArgs(mockRequest, startConfig, requestOptions);
                 assert.isNull(err);
                 done();
@@ -139,18 +134,17 @@ describe('index test', () => {
         });
     });
 
-    describe('_startFrozen', (done) => {
+    describe('_startFrozen', done => {
         it('Calls api to start frozen build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
 
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=frozen',
-                    method: 'POST',
-                    body: testConfig
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=frozen',
+                method: 'POST',
+                body: testConfig
+            });
 
-            return executor.startFrozen(testConfig, (err) => {
+            return executor.startFrozen(testConfig, err => {
                 assert.calledWithArgs(mockRequest, testConfig, requestOptions);
                 assert.isNull(err);
                 done();
@@ -158,18 +152,17 @@ describe('index test', () => {
         });
     });
 
-    describe('_stopFrozen', (done) => {
+    describe('_stopFrozen', done => {
         it('Calls api to stop frozen builds', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
 
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=frozen',
-                    method: 'DELETE',
-                    body: testConfig
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=frozen',
+                method: 'DELETE',
+                body: testConfig
+            });
 
-            return executor.stopFrozen(testConfig, (err) => {
+            return executor.stopFrozen(testConfig, err => {
                 assert.calledWithArgs(mockRequest, testConfig, requestOptions);
                 assert.isNull(err);
                 done();
@@ -177,7 +170,7 @@ describe('index test', () => {
         });
     });
 
-    describe('_stop', (done) => {
+    describe('_stop', done => {
         it('Calls api to stop a build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
             const stopConfig = {
@@ -191,14 +184,13 @@ describe('index test', () => {
                 pipelineId: testConfig.pipelineId
             };
 
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message',
-                    method: 'DELETE',
-                    body: stopConfig
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message',
+                method: 'DELETE',
+                body: stopConfig
+            });
 
-            executor.stop(stopConfig, (err) => {
+            executor.stop(stopConfig, err => {
                 assert.calledWithArgs(mockRequest, stopConfig, requestOptions);
                 assert.isNull(err);
                 done();
@@ -206,7 +198,7 @@ describe('index test', () => {
         });
     });
 
-    describe('stats', (done) => {
+    describe('stats', done => {
         it('Calls api to get stats', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
             const statsConfig = {
@@ -216,13 +208,12 @@ describe('index test', () => {
                 pipelineId: testConfig.pipelineId
             };
 
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message',
-                    method: 'GET'
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message',
+                method: 'GET'
+            });
 
-            return executor.stats(statsConfig, (err) => {
+            return executor.stats(statsConfig, err => {
                 assert.calledWithArgs(mockRequest, {}, requestOptions);
                 assert.isNull(err);
                 done();
@@ -230,11 +221,11 @@ describe('index test', () => {
         });
     });
 
-    describe('_stopTimer', (done) => {
+    describe('_stopTimer', done => {
         it('Calls api to stop timer', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
             const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
+            const isoTime = new Date(dateNow).toISOString();
             const sandbox = sinon.sandbox.create({
                 useFakeTimers: false
             });
@@ -248,14 +239,13 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=timer',
-                    method: 'DEELTE',
-                    body: timerConfig
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=timer',
+                method: 'DEELTE',
+                body: timerConfig
+            });
 
-            return executor.stopTimer(timerConfig, (err) => {
+            return executor.stopTimer(timerConfig, err => {
                 assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
                 assert.isNull(err);
                 done();
@@ -264,11 +254,11 @@ describe('index test', () => {
         });
     });
 
-    describe('_startTimer', (done) => {
+    describe('_startTimer', done => {
         it('Calls api to start timer', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
             const dateNow = Date.now();
-            const isoTime = (new Date(dateNow)).toISOString();
+            const isoTime = new Date(dateNow).toISOString();
             const sandbox = sinon.sandbox.create({
                 useFakeTimers: false
             });
@@ -282,14 +272,13 @@ describe('index test', () => {
             };
 
             sandbox.useFakeTimers(dateNow);
-            Object.assign(requestOptions,
-                {
-                    url: 'http://localhost/v1/queue/message?type=timer',
-                    method: 'POST',
-                    body: testConfig
-                });
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=timer',
+                method: 'POST',
+                body: testConfig
+            });
 
-            return executor.startTimer(timerConfig, (err) => {
+            return executor.startTimer(timerConfig, err => {
                 assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
                 assert.isNull(err);
                 done();
