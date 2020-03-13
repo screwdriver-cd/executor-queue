@@ -16,7 +16,7 @@ class ExecutorQueue extends Executor {
 
     /**
      * Starts a new periodic build in an executor
-     * @method startPeriodic
+     * @method _startPeriodic
      * @param {Object}   config              Configuration
      * @param {Object}   config.pipeline     Pipeline of the job
      * @param {Object}   config.job          Job object to create periodic builds for
@@ -26,7 +26,7 @@ class ExecutorQueue extends Executor {
      * @param {Boolean}  config.triggerBuild Flag to post new build event
      * @return {Promise}
      */
-    async startPeriodic(config) {
+    async _startPeriodic(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=periodic',
             method: 'POST',
@@ -41,7 +41,7 @@ class ExecutorQueue extends Executor {
      * @param  {Integer} config.jobId  ID of the job with periodic builds
      * @return {Promise}
      */
-    async stopPeriodic(config) {
+    async _stopPeriodic(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=periodic',
             method: 'DELETE',
@@ -51,11 +51,11 @@ class ExecutorQueue extends Executor {
 
     /**
      * Calls postBuildEvent() with job configuration
-     * @async startFrozen
+     * @async _startFrozen
      * @param {Object} config       Configuration
      * @return {Promise}
      */
-    async startFrozen(config) {
+    async _startFrozen(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=frozen',
             method: 'POST',
@@ -65,12 +65,12 @@ class ExecutorQueue extends Executor {
 
     /**
      * Stops a previously enqueued frozen build in an executor
-     * @async  stopFrozen
+     * @async  _stopFrozen
      * @param  {Object}  config        Configuration
      * @param  {Integer} config.jobId  ID of the job with frozen builds
      * @return {Promise}
      */
-    async stopFrozen(config) {
+    async _stopFrozen(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=frozen',
             method: 'DELETE',
@@ -80,14 +80,14 @@ class ExecutorQueue extends Executor {
 
     /**
      * Adds start time of a build to timeout queue
-     * @method status
+     * @method _startTimer
      * @param  {Object} config               Configuration
      * @param  {String} config.buildId       Unique ID for a build
      * @param  {String} config.startTime     Start time fo build
      * @param  {String} config.buildStatus     Status of build
      * @return {Promise}
      */
-    async startTimer(config) {
+    async _startTimer(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=timer',
             method: 'POST',
@@ -97,12 +97,12 @@ class ExecutorQueue extends Executor {
 
     /**
      * Removes start time info key from timeout queue
-     * @method status
+     * @method _stopTimer
      * @param  {Object} config               Configuration
      * @param  {String} config.buildId       Unique ID for a build
      * @return {Promise}
      */
-    async stopTimer(config) {
+    async _stopTimer(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=timer',
             method: 'DELETE',
@@ -132,7 +132,7 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.token         JWT to act on behalf of the build
      * @return {Promise}
      */
-    async start(config) {
+    async _start(config) {
         return this.api(config, {
             path: '/v1/queue/message',
             method: 'POST',
@@ -149,7 +149,7 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.jobId         JobID that this build belongs to
      * @return {Promise}
      */
-    async stop(config) {
+    async _stop(config) {
         return this.api(config, {
             path: '/v1/queue/message',
             method: 'DELETE',
