@@ -16,7 +16,7 @@ class ExecutorQueue extends Executor {
 
     /**
      * Starts a new periodic build in an executor
-     * @method _startPeriodic
+     * @method startPeriodic
      * @param {Object}   config              Configuration
      * @param {Object}   config.pipeline     Pipeline of the job
      * @param {Object}   config.job          Job object to create periodic builds for
@@ -26,7 +26,7 @@ class ExecutorQueue extends Executor {
      * @param {Boolean}  config.triggerBuild Flag to post new build event
      * @return {Promise}
      */
-    async _startPeriodic(config) {
+    async startPeriodic(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=periodic',
             method: 'POST',
@@ -41,7 +41,7 @@ class ExecutorQueue extends Executor {
      * @param  {Integer} config.jobId  ID of the job with periodic builds
      * @return {Promise}
      */
-    async _stopPeriodic(config) {
+    async stopPeriodic(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=periodic',
             method: 'DELETE',
@@ -51,11 +51,11 @@ class ExecutorQueue extends Executor {
 
     /**
      * Calls postBuildEvent() with job configuration
-     * @async _startFrozen
+     * @async startFrozen
      * @param {Object} config       Configuration
      * @return {Promise}
      */
-    async _startFrozen(config) {
+    async startFrozen(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=frozen',
             method: 'POST',
@@ -70,7 +70,7 @@ class ExecutorQueue extends Executor {
      * @param  {Integer} config.jobId  ID of the job with frozen builds
      * @return {Promise}
      */
-    async _stopFrozen(config) {
+    async stopFrozen(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=frozen',
             method: 'DELETE',
@@ -87,7 +87,7 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.buildStatus     Status of build
      * @return {Promise}
      */
-    async _startTimer(config) {
+    async startTimer(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=timer',
             method: 'POST',
@@ -102,7 +102,7 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.buildId       Unique ID for a build
      * @return {Promise}
      */
-    async _stopTimer(config) {
+    async stopTimer(config) {
         return this.api(config, {
             path: '/v1/queue/message?type=timer',
             method: 'DELETE',
@@ -132,7 +132,7 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.token         JWT to act on behalf of the build
      * @return {Promise}
      */
-    async _start(config) {
+    async start(config) {
         return this.api(config, {
             path: '/v1/queue/message',
             method: 'POST',
@@ -149,10 +149,10 @@ class ExecutorQueue extends Executor {
      * @param  {String} config.jobId         JobID that this build belongs to
      * @return {Promise}
      */
-    async _stop(config) {
+    async stop(config) {
         return this.api(config, {
             path: '/v1/queue/message',
-            method: 'POST',
+            method: 'DELETE',
             body: config
         });
     }
@@ -189,18 +189,19 @@ class ExecutorQueue extends Executor {
             retryStrategy: this.requestRetryStrategy
         };
 
-        Object.assign({}, addionalOptions, options);
+        options = ({ ...addionalOptions, ...options });
 
-        logger.info(`${options.method} ${options.path} for pipeline ` +
-            `${config.pipelineId}:${config.jobId}`);
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {
-                if (!err && response.statusCode === 200) {
-                    return resolve(response);
-                }
-                if (response.statusCode !== 201) {
-                    return reject(JSON.stringify(response.body));
+                if (!err) {
+                    if (response.statusCode === 200) {
+                        return resolve(response);
+                    }
+                    if (response.statusCode !== 201) {
+                        return resolve(JSON.stringify(response.body));
+                    }
                 }
 
                 return reject(err);
