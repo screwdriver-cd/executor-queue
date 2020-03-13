@@ -189,10 +189,9 @@ class ExecutorQueue extends Executor {
             retryStrategy: this.requestRetryStrategy
         };
 
-        Object.assign({}, addionalOptions, options);
+        ({ ...addionalOptions, ...options });
 
-        logger.info(`${options.method} ${options.path} for pipeline ` +
-            `${config.pipelineId}:${config.jobId}`);
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {
