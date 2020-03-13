@@ -172,24 +172,23 @@ class ExecutorQueue extends Executor {
     /**
      * Makes api call to the url endpoint
      * @async api
-     * @param {Object} options
+     * @param {Object} args
      * @param {Object} config
      * @return Promise.resolve
      */
-    async api(config, options) {
-        const addionalOptions = {
+    async api(config, args) {
+        const options = {
             headers: {
                 Authorization: `Bearer ${config.token}`,
                 'Content-Type': 'application/json'
             },
-            url: `${this.queueUri}${options.path}`,
+            url: `${this.queueUri}${args.path}`,
             json: true,
             maxAttempts: RETRY_LIMIT,
             retryDelay: RETRY_DELAY * 1000, // in ms
-            retryStrategy: this.requestRetryStrategy
+            retryStrategy: this.requestRetryStrategy,
+            ...args
         };
-
-        options = ({ ...addionalOptions, ...options });
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
 
