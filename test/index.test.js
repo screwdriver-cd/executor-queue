@@ -40,7 +40,7 @@ describe('index test', () => {
 
         executor = new Executor({
             ecosystem: {
-                queueUri: 'http://localhost'
+                queue: 'http://localhost'
             }
         });
         requestOptions = {

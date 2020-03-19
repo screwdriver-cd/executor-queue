@@ -11,7 +11,7 @@ class ExecutorQueue extends Executor {
         super();
         this.requestRetryStrategy = (err, response) =>
             !!err || (response.statusCode !== 201 && response.statusCode !== 200);
-        this.queueUri = config.ecosystem.queueUri;
+        this.queueUri = config.ecosystem.queue;
     }
 
     /**
