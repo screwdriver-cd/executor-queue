@@ -190,7 +190,10 @@ class ExecutorQueue extends Executor {
             ...args
         };
 
-        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+        logger.info(
+            `${options.method} ${options.path} for pipeline ${config.pipelineId || config.pipeline.id}:${config.jobId ||
+                config.job.id}`
+        );
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {
