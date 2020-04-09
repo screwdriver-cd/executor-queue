@@ -27,11 +27,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startPeriodic(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=periodic',
             method: 'POST',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipeline.id}:${config.job.id}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -42,11 +46,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _stopPeriodic(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=periodic',
             method: 'DELETE',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -56,11 +64,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startFrozen(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=frozen',
             method: 'POST',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -71,11 +83,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _stopFrozen(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=frozen',
             method: 'DELETE',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -88,11 +104,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _startTimer(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=timer',
             method: 'POST',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -103,11 +123,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _stopTimer(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message?type=timer',
             method: 'DELETE',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -133,11 +157,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _start(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message',
             method: 'POST',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -150,11 +178,15 @@ class ExecutorQueue extends Executor {
      * @return {Promise}
      */
     async _stop(config) {
-        return this.api(config, {
+        const options = {
             path: '/v1/queue/message',
             method: 'DELETE',
             body: config
-        });
+        };
+
+        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
+
+        return this.api(config, options);
     }
 
     /**
@@ -163,6 +195,8 @@ class ExecutorQueue extends Executor {
      * @param {Response} Object     Object containing stats for the executor
      */
     stats(config) {
+        logger.info('GET /v1/queue/stats for pipeline');
+
         return this.api(config, {
             path: '/v1/queue/stats',
             method: 'GET'
@@ -189,8 +223,6 @@ class ExecutorQueue extends Executor {
             retryStrategy: this.requestRetryStrategy,
             ...args
         };
-
-        logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {

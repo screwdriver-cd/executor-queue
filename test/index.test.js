@@ -79,7 +79,7 @@ describe('index test', () => {
     describe('_startPeriodic', done => {
         it('Calls api to start periodic build', () => {
             mockRequest.yieldsAsync(null, { statusCode: 200 });
-            const periodicConfig = { ...testConfig, username: 'admin' };
+            const periodicConfig = { ...testConfig, username: 'admin', pipeline: { id: 123 }, job: { id: 777 } };
 
             const options = {
                 ...requestOptions,
@@ -235,13 +235,14 @@ describe('index test', () => {
                 jobId: testConfig.jobId,
                 startTime: isoTime,
                 job: testJob,
-                pipeline: testPipeline
+                pipeline: testPipeline,
+                pipelineId: testPipeline.id
             };
 
             sandbox.useFakeTimers(dateNow);
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=timer',
-                method: 'DEELTE',
+                method: 'DELETE',
                 body: timerConfig
             });
 
@@ -268,7 +269,8 @@ describe('index test', () => {
                 jobId: testConfig.jobId,
                 startTime: isoTime,
                 job: testJob,
-                pipeline: testPipeline
+                pipeline: testPipeline,
+                pipelineId: testPipeline.id
             };
 
             sandbox.useFakeTimers(dateNow);
