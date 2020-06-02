@@ -213,8 +213,11 @@ describe('index test', () => {
                 method: 'GET'
             });
 
-            return executor.stats(statsConfig, err => {
+            mockRequest.yieldsAsync(null, { body: 'Hello', statusCode: 200 });
+
+            return executor.stats(statsConfig, (err, res) => {
                 assert.calledWithArgs(mockRequest, {}, requestOptions);
+                assert.equal(res, 'Hello');
                 assert.isNull(err);
                 done();
             });
