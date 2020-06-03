@@ -203,7 +203,7 @@ class ExecutorQueue extends Executor {
      * @return Promise.resolve
      */
     async api(config, args) {
-        const token = { config };
+        const { token } = config;
 
         delete config.token;
 

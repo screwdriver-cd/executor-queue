@@ -239,7 +239,8 @@ describe('index test', () => {
                 startTime: isoTime,
                 job: testJob,
                 pipeline: testPipeline,
-                pipelineId: testPipeline.id
+                pipelineId: testPipeline.id,
+                token: testConfig.token
             };
 
             sandbox.useFakeTimers(dateNow);
@@ -273,7 +274,8 @@ describe('index test', () => {
                 startTime: isoTime,
                 job: testJob,
                 pipeline: testPipeline,
-                pipelineId: testPipeline.id
+                pipelineId: testPipeline.id,
+                token: testConfig.token
             };
 
             sandbox.useFakeTimers(dateNow);
