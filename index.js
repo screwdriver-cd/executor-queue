@@ -223,9 +223,8 @@ class ExecutorQueue extends Executor {
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {
-                console.log(response);
                 if (!err) {
-                    return resolve(JSON.stringify(response.body));
+                    return resolve(response.body);
                 }
 
                 return reject(err);
