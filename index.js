@@ -184,6 +184,7 @@ class ExecutorQueue extends Executor {
     /**
      * Retrieve stats for the executor
      * @method stats
+     * @param  {Object} config               Configuration
      * @param {Response} Object     Object containing stats for the executor
      */
     stats(config) {
@@ -203,9 +204,10 @@ class ExecutorQueue extends Executor {
      * @return Promise.resolve
      */
     async api(config, args) {
-        const { token } = config;
+        const body = Object.assign({}, config);
+        const { token } = body;
 
-        delete config.token;
+        delete body.token;
 
         const options = {
             headers: {
@@ -218,7 +220,7 @@ class ExecutorQueue extends Executor {
             retryDelay: RETRY_DELAY * 1000, // in ms
             retryStrategy: this.requestRetryStrategy,
             ...args,
-            body: config
+            body
         };
 
         return new Promise((resolve, reject) => {
