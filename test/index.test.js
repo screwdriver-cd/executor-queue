@@ -213,8 +213,11 @@ describe('index test', () => {
                 method: 'GET'
             });
 
-            return executor.stats(statsConfig, err => {
+            mockRequest.yieldsAsync(null, { body: 'Hello', statusCode: 200 });
+
+            return executor.stats(statsConfig, (err, res) => {
                 assert.calledWithArgs(mockRequest, {}, requestOptions);
+                assert.equal(res, 'Hello');
                 assert.isNull(err);
                 done();
             });
@@ -236,7 +239,8 @@ describe('index test', () => {
                 startTime: isoTime,
                 job: testJob,
                 pipeline: testPipeline,
-                pipelineId: testPipeline.id
+                pipelineId: testPipeline.id,
+                token: testConfig.token
             };
 
             sandbox.useFakeTimers(dateNow);
@@ -270,7 +274,8 @@ describe('index test', () => {
                 startTime: isoTime,
                 job: testJob,
                 pipeline: testPipeline,
-                pipelineId: testPipeline.id
+                pipelineId: testPipeline.id,
+                token: testConfig.token
             };
 
             sandbox.useFakeTimers(dateNow);

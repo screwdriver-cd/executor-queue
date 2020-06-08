@@ -29,8 +29,7 @@ class ExecutorQueue extends Executor {
     async _startPeriodic(config) {
         const options = {
             path: '/v1/queue/message?type=periodic',
-            method: 'POST',
-            body: config
+            method: 'POST'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipeline.id}:${config.job.id}`);
@@ -48,8 +47,7 @@ class ExecutorQueue extends Executor {
     async _stopPeriodic(config) {
         const options = {
             path: '/v1/queue/message?type=periodic',
-            method: 'DELETE',
-            body: config
+            method: 'DELETE'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -66,8 +64,7 @@ class ExecutorQueue extends Executor {
     async _startFrozen(config) {
         const options = {
             path: '/v1/queue/message?type=frozen',
-            method: 'POST',
-            body: config
+            method: 'POST'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -85,8 +82,7 @@ class ExecutorQueue extends Executor {
     async _stopFrozen(config) {
         const options = {
             path: '/v1/queue/message?type=frozen',
-            method: 'DELETE',
-            body: config
+            method: 'DELETE'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -106,8 +102,7 @@ class ExecutorQueue extends Executor {
     async _startTimer(config) {
         const options = {
             path: '/v1/queue/message?type=timer',
-            method: 'POST',
-            body: config
+            method: 'POST'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -125,8 +120,7 @@ class ExecutorQueue extends Executor {
     async _stopTimer(config) {
         const options = {
             path: '/v1/queue/message?type=timer',
-            method: 'DELETE',
-            body: config
+            method: 'DELETE'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -159,8 +153,7 @@ class ExecutorQueue extends Executor {
     async _start(config) {
         const options = {
             path: '/v1/queue/message',
-            method: 'POST',
-            body: config
+            method: 'POST'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -180,8 +173,7 @@ class ExecutorQueue extends Executor {
     async _stop(config) {
         const options = {
             path: '/v1/queue/message',
-            method: 'DELETE',
-            body: config
+            method: 'DELETE'
         };
 
         logger.info(`${options.method} ${options.path} for pipeline ${config.pipelineId}:${config.jobId}`);
@@ -192,6 +184,7 @@ class ExecutorQueue extends Executor {
     /**
      * Retrieve stats for the executor
      * @method stats
+     * @param  {Object} config               Configuration
      * @param {Response} Object     Object containing stats for the executor
      */
     stats(config) {
@@ -211,9 +204,14 @@ class ExecutorQueue extends Executor {
      * @return Promise.resolve
      */
     async api(config, args) {
+        const body = Object.assign({}, config);
+        const { token } = body;
+
+        delete body.token;
+
         const options = {
             headers: {
-                Authorization: `Bearer ${config.token}`,
+                Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
             url: `${this.queueUri}${args.path}`,
@@ -221,18 +219,14 @@ class ExecutorQueue extends Executor {
             maxAttempts: RETRY_LIMIT,
             retryDelay: RETRY_DELAY * 1000, // in ms
             retryStrategy: this.requestRetryStrategy,
-            ...args
+            ...args,
+            body
         };
 
         return new Promise((resolve, reject) => {
             requestretry(options, (err, response) => {
                 if (!err) {
-                    if (response.statusCode === 200) {
-                        return resolve(response);
-                    }
-                    if (response.statusCode !== 201) {
-                        return resolve(JSON.stringify(response.body));
-                    }
+                    return resolve(response.body);
                 }
 
                 return reject(err);
