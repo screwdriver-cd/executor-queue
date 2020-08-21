@@ -1,6 +1,6 @@
 {
   "name": "screwdriver-executor-queue",
-  "version": "4.0.0",
+  "version": "3.0.0",
   "description": "Executor plugin for Screwdriver using Resque",
   "main": "index.js",
   "scripts": {
