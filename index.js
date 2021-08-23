@@ -2,15 +2,20 @@
 
 const Executor = require('screwdriver-executor-base');
 const logger = require('screwdriver-logger');
-const requestretry = require('requestretry');
+const requestretry = require('screwdriver-request');
 const RETRY_LIMIT = 3;
 const RETRY_DELAY = 5;
 
 class ExecutorQueue extends Executor {
     constructor(config = {}) {
         super();
-        this.requestRetryStrategy = (err, response) =>
-            !!err || (response.statusCode !== 201 && response.statusCode !== 200);
+        this.requestRetryStrategy = (response, retryWithMergedOptions) => {
+            if (response.statusCode !== 201 && response.statusCode !== 200) {
+                retryWithMergedOptions({});
+            }
+
+            return response;
+        };
         this.queueUri = config.ecosystem.queue;
     }
 
@@ -215,23 +220,18 @@ class ExecutorQueue extends Executor {
                 'Content-Type': 'application/json'
             },
             url: `${this.queueUri}${args.path}`,
-            json: true,
-            maxAttempts: RETRY_LIMIT,
-            retryDelay: RETRY_DELAY * 1000, // in ms
-            retryStrategy: this.requestRetryStrategy,
-            ...args,
+            retryOptions: {
+                limit: RETRY_LIMIT,
+                calculateDelay: ({ computedValue }) => (computedValue ? RETRY_DELAY * 1000 : 0) // in ms
+            },
+            hooks: {
+                afterResponse: [this.requestRetryStrategy]
+            },
+            method: args.method,
             body
         };
 
-        return new Promise((resolve, reject) => {
-            requestretry(options, (err, response) => {
-                if (!err) {
-                    return resolve(response.body);
-                }
-
-                return reject(err);
-            });
-        });
+        return requestretry(options).then(response => response.body);
     }
 }
 
