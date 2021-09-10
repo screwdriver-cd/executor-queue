@@ -88,7 +88,7 @@ describe('index test', () => {
                 ...requestOptions,
                 url: 'http://localhost/v1/queue/message?type=periodic',
                 method: 'POST',
-                body: periodicConfig
+                json: periodicConfig
             };
 
             return executor.startPeriodic(periodicConfig, err => {
@@ -107,7 +107,7 @@ describe('index test', () => {
                 ...requestOptions,
                 url: 'http://localhost/v1/queue/message?type=periodic',
                 method: 'DELETE',
-                body: testConfig
+                json: testConfig
             };
 
             return executor.stopPeriodic(testConfig, err => {
@@ -126,7 +126,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message',
                 method: 'POST',
-                body: startConfig
+                json: startConfig
             });
 
             return executor.start(startConfig, err => {
@@ -144,7 +144,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=frozen',
                 method: 'POST',
-                body: testConfig
+                json: testConfig
             });
 
             return executor.startFrozen(testConfig, err => {
@@ -162,7 +162,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=frozen',
                 method: 'DELETE',
-                body: testConfig
+                json: testConfig
             });
 
             return executor.stopFrozen(testConfig, err => {
@@ -190,7 +190,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message',
                 method: 'DELETE',
-                body: stopConfig
+                json: stopConfig
             });
 
             executor.stop(stopConfig, err => {
@@ -250,7 +250,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=timer',
                 method: 'DELETE',
-                body: timerConfig
+                json: timerConfig
             });
 
             return executor.stopTimer(timerConfig, err => {
@@ -285,7 +285,7 @@ describe('index test', () => {
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=timer',
                 method: 'POST',
-                body: testConfig
+                json: testConfig
             });
 
             return executor.startTimer(timerConfig, err => {

@@ -209,10 +209,10 @@ class ExecutorQueue extends Executor {
      * @return Promise.resolve
      */
     async api(config, args) {
-        const body = Object.assign({}, config);
-        const { token } = body;
+        const json = { ...config };
+        const { token } = json;
 
-        delete body.token;
+        delete json.token;
 
         const options = {
             headers: {
@@ -228,7 +228,7 @@ class ExecutorQueue extends Executor {
                 afterResponse: [this.requestRetryStrategy]
             },
             method: args.method,
-            body
+            json
         };
 
         return requestretry(options).then(response => response.body);
