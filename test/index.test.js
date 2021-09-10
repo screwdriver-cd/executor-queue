@@ -32,7 +32,7 @@ describe('index test', () => {
             token: 'admintoken'
         });
         mockRequest = sinon.stub();
-        mockery.registerMock('requestretry', mockRequest);
+        mockery.registerMock('screwdriver-request', mockRequest);
 
         /* eslint-disable global-require */
         Executor = require('../index');
@@ -48,13 +48,13 @@ describe('index test', () => {
                 Authorization: 'Bearer admintoken',
                 'Content-Type': 'application/json'
             },
-            json: testConfig,
-            limit: 3,
-            calculateDelay: () => {
-                return 5000;
+            body: testConfig,
+            retryOptions: {
+                limit: 3,
+                calculateDelay: ({ computedValue }) => (computedValue ? 5000 : 0)
             },
             hooks: {
-                afterResponse: executor.requestRetryStrategy
+                afterResponse: [executor.requestRetryStrategy]
             }
         };
     });
@@ -81,7 +81,7 @@ describe('index test', () => {
 
     describe('_startPeriodic', done => {
         it('Calls api to start periodic build', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const periodicConfig = { ...testConfig, username: 'admin', pipeline: { id: 123 }, job: { id: 777 } };
 
             const options = {
@@ -101,7 +101,7 @@ describe('index test', () => {
 
     describe('_stopPeriodic', done => {
         it('Calls api to stop periodic build', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
 
             const options = {
                 ...requestOptions,
@@ -120,7 +120,7 @@ describe('index test', () => {
 
     describe('_start', done => {
         it('Calls api to start build', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const startConfig = { ...testConfig, pipeline: testPipeline };
 
             Object.assign(requestOptions, {
@@ -139,7 +139,7 @@ describe('index test', () => {
 
     describe('_startFrozen', done => {
         it('Calls api to start frozen build', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
 
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=frozen',
@@ -157,7 +157,7 @@ describe('index test', () => {
 
     describe('_stopFrozen', done => {
         it('Calls api to stop frozen builds', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
 
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=frozen',
@@ -175,7 +175,7 @@ describe('index test', () => {
 
     describe('_stop', done => {
         it('Calls api to stop a build', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const stopConfig = {
                 annotations: testConfig.annotations,
                 blockedBy: testConfig.blockedBy,
@@ -203,7 +203,7 @@ describe('index test', () => {
 
     describe('stats', done => {
         it('Calls api to get stats', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const statsConfig = {
                 buildId: testConfig.buildId,
                 jobId: testConfig.jobId,
@@ -216,7 +216,7 @@ describe('index test', () => {
                 method: 'GET'
             });
 
-            mockRequest.yieldsAsync(null, { json: 'Hello', statusCode: 200 });
+            mockRequest.resolves({ body: 'Hello', statusCode: 200 });
 
             return executor.stats(statsConfig, (err, res) => {
                 assert.calledWithArgs(mockRequest, {}, requestOptions);
@@ -229,7 +229,7 @@ describe('index test', () => {
 
     describe('_stopTimer', done => {
         it('Calls api to stop timer', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const dateNow = Date.now();
             const isoTime = new Date(dateNow).toISOString();
             const sandbox = sinon.sandbox.create({
@@ -264,7 +264,7 @@ describe('index test', () => {
 
     describe('_startTimer', done => {
         it('Calls api to start timer', () => {
-            mockRequest.yieldsAsync(null, { statusCode: 200 });
+            mockRequest.resolves({ statusCode: 200 });
             const dateNow = Date.now();
             const isoTime = new Date(dateNow).toISOString();
             const sandbox = sinon.sandbox.create({

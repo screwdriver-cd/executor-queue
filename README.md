@@ -1,5 +1,5 @@
 # Executor Queue
-[![Version][npm-image]][npm-url] ![Downloads][downloads-image] [![Build Status][status-image]][status-url] [![Open Issues][issues-image]][issues-url] [![Dependency Status][daviddm-image]][daviddm-url] ![License][license-image]
+[![Version][npm-image]][npm-url] ![Downloads][downloads-image] [![Build Status][status-image]][status-url] [![Open Issues][issues-image]][issues-url] ![License][license-image]
 
 > An executor plugin that routes builds through a Redis queue
 
@@ -49,7 +49,5 @@ Code licensed under the BSD 3-Clause license. See [LICENSE](./LICENSE) file for 
 [license-image]: https://img.shields.io/npm/l/screwdriver-executor-queue.svg
 [issues-image]: https://img.shields.io/github/issues/screwdriver-cd/executor-queue.svg
 [issues-url]: https://github.com/screwdriver-cd/executor-queue/issues
-[status-image]: https://cd.screwdriver.cd/pipelines/295/badge
-[status-url]: https://cd.screwdriver.cd/pipelines/295
-[daviddm-image]: https://david-dm.org/screwdriver-cd/executor-queue.svg?theme=shields.io
-[daviddm-url]: https://david-dm.org/screwdriver-cd/executor-queue
+[status-image]: https://cd.screwdriver.cd/pipelines/571/badge
+[status-url]: https://cd.screwdriver.cd/pipelines/571
