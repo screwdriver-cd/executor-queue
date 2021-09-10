@@ -204,10 +204,10 @@ class ExecutorQueue extends Executor {
      * @return Promise.resolve
      */
     async api(config, args) {
-        const body = Object.assign({}, config);
-        const { token } = body;
+        const json = { ...config };
+        const { token } = json;
 
-        delete body.token;
+        delete json.token;
 
         const options = {
             headers: {
@@ -215,12 +215,13 @@ class ExecutorQueue extends Executor {
                 'Content-Type': 'application/json'
             },
             url: `${this.queueUri}${args.path}`,
-            json: true,
-            maxAttempts: RETRY_LIMIT,
-            retryDelay: RETRY_DELAY * 1000, // in ms
-            retryStrategy: this.requestRetryStrategy,
+            limit: RETRY_LIMIT,
+            calculateDelay: ({ computedValue }) => (computedValue ? RETRY_DELAY * 1000 : 0), // in ms
+            hooks: {
+                afterResponse: [this.requestRetryStrategy]
+            },
             ...args,
-            body
+            json
         };
 
         return new Promise((resolve, reject) => {
