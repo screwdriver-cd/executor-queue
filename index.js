@@ -9,9 +9,9 @@ const RETRY_DELAY = 5;
 class ExecutorQueue extends Executor {
     constructor(config = {}) {
         super();
-        this.requestRetryStrategy = (response, retryWithMergedOptions) => {
+        this.requestRetryStrategy = response => {
             if (response.statusCode !== 201 && response.statusCode !== 200) {
-                retryWithMergedOptions({});
+                throw new Error('Retry limit reached');
             }
 
             return response;
@@ -220,7 +220,7 @@ class ExecutorQueue extends Executor {
                 'Content-Type': 'application/json'
             },
             url: `${this.queueUri}${args.path}`,
-            retryOptions: {
+            retry: {
                 limit: RETRY_LIMIT,
                 calculateDelay: ({ computedValue }) => (computedValue ? RETRY_DELAY * 1000 : 0) // in ms
             },

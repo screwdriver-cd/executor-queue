@@ -49,7 +49,7 @@ describe('index test', () => {
                 'Content-Type': 'application/json'
             },
             body: testConfig,
-            retryOptions: {
+            retry: {
                 limit: 3,
                 calculateDelay: ({ computedValue }) => (computedValue ? 5000 : 0)
             },
