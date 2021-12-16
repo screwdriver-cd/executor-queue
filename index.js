@@ -134,6 +134,24 @@ class ExecutorQueue extends Executor {
     }
 
     /**
+     * Unzip the ZIP of artifacts
+     * @method _unzipArtifacts
+     * @param  {Object}  config           Configuration
+     * @param  {Integer} config.buildId   Unique ID for a build
+     * @return {Promise}
+     */
+    async _unzipArtifacts(config) {
+        const options = {
+            path: '/v1/queue/message?type=unzip',
+            method: 'POST'
+        }
+
+        logger.info(`${options.method} ${options.path} for artifacts of build:${config.buildId}`);
+
+        return this.api(config, options);
+    }
+
+    /**
      * Starts a new build in an executor
      * @async  _start
      * @param  {Object} config               Configuration

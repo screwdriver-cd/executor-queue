@@ -173,6 +173,24 @@ describe('index test', () => {
         });
     });
 
+    describe('_unzipArtifacts', done => {
+        it('Calls api to unzip build artifacts', () => {
+            mockRequest.resolves({ statusCode: 200 });
+
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=unzip',
+                method: 'POST',
+                json: { buildId: 1234 }
+            });
+
+            return executor.unzipArtifacts({ buildId: 1234 }, err => {
+                assert.calledWithArgs(mockRequest, testConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
     describe('_stop', done => {
         it('Calls api to stop a build', () => {
             mockRequest.resolves({ statusCode: 200 });
