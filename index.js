@@ -144,7 +144,7 @@ class ExecutorQueue extends Executor {
         const options = {
             path: '/v1/queue/message?type=unzip',
             method: 'POST'
-        }
+        };
 
         logger.info(`${options.method} ${options.path} for artifacts of build:${config.buildId}`);
 
