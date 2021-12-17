@@ -137,7 +137,8 @@ class ExecutorQueue extends Executor {
      * Unzip the ZIP of artifacts
      * @method _unzipArtifacts
      * @param  {Object}  config           Configuration
-     * @param  {Integer} config.buildId   Unique ID for a build
+     * @param  {Number}  config.buildId   Unique ID for a build
+     * @param  {String}  config.token     JWT to act on behalf of the build
      * @return {Promise}
      */
     async _unzipArtifacts(config) {
