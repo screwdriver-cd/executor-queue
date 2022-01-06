@@ -191,6 +191,24 @@ describe('index test', () => {
         });
     });
 
+    describe('_enqueueWebhook', done => {
+        it('Calls api to enqueue webhookConfig', () => {
+            mockRequest.resolves({ statusCode: 200 });
+
+            Object.assign(requestOptions, {
+                url: 'http://localhost/v1/queue/message?type=webhook',
+                method: 'POST',
+                json: { hookId: 1234 }
+            });
+
+            return executor.enqueueWebhook({ hookId: 1234 }, err => {
+                assert.calledWithArgs(mockRequest, testConfig, requestOptions);
+                assert.isNull(err);
+                done();
+            });
+        });
+    });
+
     describe('_stop', done => {
         it('Calls api to stop a build', () => {
             mockRequest.resolves({ statusCode: 200 });
