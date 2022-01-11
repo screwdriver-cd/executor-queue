@@ -153,6 +153,24 @@ class ExecutorQueue extends Executor {
     }
 
     /**
+     * Enqueue webhookConfig to queue service
+     * @method _enqueueWebhook
+     * @param  {Object}  config           Configuration
+     * @param  {String}  config.token     JWT to call api
+     * @return {Promise}
+     */
+    async _enqueueWebhook(config) {
+        const options = {
+            path: '/v1/queue/message?type=webhook',
+            method: 'POST'
+        };
+
+        logger.info(`${options.method} ${options.path} for hookId:${config.hookId}`);
+
+        return this.api(config, options);
+    }
+
+    /**
      * Starts a new build in an executor
      * @async  _start
      * @param  {Object} config               Configuration
