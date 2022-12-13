@@ -264,14 +264,24 @@ describe('index test', () => {
     });
 
     describe('_stopTimer', done => {
+        let clock;
+        let dateNow;
+
+        beforeEach(() => {
+            dateNow = Date.now();
+            clock = sinon.useFakeTimers({
+                now: dateNow,
+                shouldAdvanceTime: true
+            });
+        });
+
+        afterEach(() => {
+            clock.restore();
+        });
+
         it('Calls api to stop timer', () => {
             mockRequest.resolves({ statusCode: 200 });
-            const dateNow = Date.now();
             const isoTime = new Date(dateNow).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
             const timerConfig = {
                 buildId: testConfig.buildId,
                 jobId: testConfig.jobId,
@@ -282,7 +292,6 @@ describe('index test', () => {
                 token: testConfig.token
             };
 
-            sandbox.useFakeTimers(dateNow);
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=timer',
                 method: 'DELETE',
@@ -293,20 +302,29 @@ describe('index test', () => {
                 assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
                 assert.isNull(err);
                 done();
-                sandbox.restore();
             });
         });
     });
 
     describe('_startTimer', done => {
+        let clock;
+        let dateNow;
+
+        beforeEach(() => {
+            dateNow = Date.now();
+            clock = sinon.useFakeTimers({
+                now: dateNow,
+                shouldAdvanceTime: true
+            });
+        });
+
+        afterEach(() => {
+            clock.restore();
+        });
+
         it('Calls api to start timer', () => {
             mockRequest.resolves({ statusCode: 200 });
-            const dateNow = Date.now();
             const isoTime = new Date(dateNow).toISOString();
-            const sandbox = sinon.sandbox.create({
-                useFakeTimers: false
-            });
-
             const timerConfig = {
                 buildId: testConfig.buildId,
                 jobId: testConfig.jobId,
@@ -317,7 +335,6 @@ describe('index test', () => {
                 token: testConfig.token
             };
 
-            sandbox.useFakeTimers(dateNow);
             Object.assign(requestOptions, {
                 url: 'http://localhost/v1/queue/message?type=timer',
                 method: 'POST',
@@ -328,7 +345,6 @@ describe('index test', () => {
                 assert.calledWithArgs(mockRequest, timerConfig, requestOptions);
                 assert.isNull(err);
                 done();
-                sandbox.restore();
             });
         });
     });
