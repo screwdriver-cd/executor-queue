@@ -1,6 +1,6 @@
 {
   "name": "screwdriver-executor-queue",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Executor plugin for Screwdriver using Resque",
   "main": "index.js",
   "scripts": {
@@ -33,21 +33,21 @@
     "Tiffany Kyi <tiffanykyi@gmail.com>"
   ],
   "devDependencies": {
-    "chai": "^4.3.4",
-    "eslint": "^7.7.0",
-    "eslint-config-screwdriver": "^5.0.4",
-    "mocha": "^8.2.1",
+    "chai": "^4.3.7",
+    "eslint": "^8.28.0",
+    "eslint-config-screwdriver": "^7.0.0",
+    "mocha": "^10.1.0",
     "mocha-multi-reporters": "^1.5.1",
     "mocha-sonarqube-reporter": "^1.0.2",
-    "mockery": "^2.0.0",
-    "nyc": "^15.0.0",
-    "sinon": "^4.5.0"
+    "mockery": "^2.1.0",
+    "nyc": "^15.1.0",
+    "sinon": "^15.0.0"
   },
   "dependencies": {
-    "screwdriver-data-schema": "^21.0.0",
-    "screwdriver-executor-base": "^8.0.0",
-    "screwdriver-logger": "^1.0.0",
-    "screwdriver-request": "^1.0.3",
+    "screwdriver-data-schema": "^22.0.1",
+    "screwdriver-executor-base": "^9.0.0",
+    "screwdriver-logger": "^2.0.0",
+    "screwdriver-request": "^2.0.1",
     "string-hash": "^1.1.3"
   },
   "release": {
