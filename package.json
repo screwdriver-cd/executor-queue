@@ -1,6 +1,6 @@
 {
   "name": "screwdriver-executor-queue",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "Executor plugin for Screwdriver using Resque",
   "main": "index.js",
   "scripts": {
@@ -44,8 +44,8 @@
     "sinon": "^15.0.0"
   },
   "dependencies": {
-    "screwdriver-data-schema": "^23.0.4",
-    "screwdriver-executor-base": "^9.0.0",
+    "screwdriver-data-schema": "^24.0.0",
+    "screwdriver-executor-base": "^10.0.0",
     "screwdriver-logger": "^2.0.0",
     "screwdriver-request": "^2.0.1",
     "string-hash": "^1.1.3"
